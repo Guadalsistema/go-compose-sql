@@ -12,7 +12,7 @@ func TestInsert(t *testing.T) {
 		LastName  string `db:"last_name"`
 	}
 
-	clause := Insert[User](SqlOpts{})
+	clause := Insert[User](nil)
 	expected := "INSERT INTO user (id, first_name, last_name) VALUES (?, ?, ?);"
 	if got := clause.Write(); got != expected {
 		t.Fatalf("unexpected SQL: %s", got)
@@ -27,7 +27,7 @@ func TestInsertWithTableOpt(t *testing.T) {
 		Name string
 	}
 
-	clause := Insert[Widget](SqlOpts{TableName: "widgets"})
+	clause := Insert[Widget](&SqlOpts{TableName: "widgets"})
 	expected := "INSERT INTO widgets (name) VALUES (?);"
 	if got := clause.Write(); got != expected {
 		t.Fatalf("unexpected SQL with table opt: %s", got)
@@ -40,7 +40,7 @@ func TestSelect(t *testing.T) {
 		FirstName string
 	}
 
-	clause := Select[User](SqlOpts{})
+	clause := Select[User](nil)
 	expected := "SELECT id, first_name FROM user;"
 	if got := clause.Write(); got != expected {
 		t.Fatalf("unexpected SQL: %s", got)
@@ -50,7 +50,7 @@ func TestSelect(t *testing.T) {
 func TestDelete(t *testing.T) {
 	type User struct{}
 
-	clause := Delete[User](SqlOpts{})
+	clause := Delete[User](nil)
 	expected := "DELETE FROM user;"
 	if got := clause.Write(); got != expected {
 		t.Fatalf("unexpected SQL: %s", got)
