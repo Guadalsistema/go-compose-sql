@@ -25,6 +25,11 @@ func (iter *QueryRowIterator[T]) Next() bool {
 	return iter.rows.Next()
 }
 
+// Check if error happen
+func (iter *QueryRowIterator[T]) Err() error {
+	return iter.rows.Err()
+}
+
 // Scan scans the current row into the given destination.
 func (iter *QueryRowIterator[T]) Scan(dest *T) error {
 	pv := reflect.New(iter.model)
