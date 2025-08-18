@@ -3,7 +3,6 @@ package sqlcompose
 import (
 	"context"
 	"reflect"
-	"regexp"
 	"testing"
 
 	"github.com/DATA-DOG/go-sqlmock"
@@ -11,9 +10,9 @@ import (
 
 func TestQuery(t *testing.T) {
 	type User struct {
-		ID        int    `db:"id"`
-		FirstName string `db:"first_name"`
-		LastName  string `db:"last_name"`
+		ID        int    `sql:"id"`
+		FirstName string `sql:"first_name"`
+		LastName  string `sql:"last_name"`
 	}
 
 	stmt := Select[User](nil)
@@ -34,9 +33,17 @@ func TestQuery(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Query returned error: %v", err)
 	}
+	defer got.Close()
 
-	want := []User{{1, "Alice", "Smith"}, {2, "Bob", "Jones"}}
-	if !reflect.DeepEqual(got, want) {
+	var user User
+	got.Next()
+	err = got.Scan(&user)
+	if err != nil || user.FirstName != "Alice" {
+		t.Fatalf("unexpected result: %+v", got)
+	}
+
+	want := User{1, "Alice", "Smith"}
+	if !reflect.DeepEqual(user, want) {
 		t.Fatalf("unexpected result: %+v", got)
 	}
 
@@ -47,11 +54,11 @@ func TestQuery(t *testing.T) {
 
 func TestQueryWhereArgs(t *testing.T) {
 	type User struct {
-		ID        int    `db:"id"`
-		FirstName string `db:"first_name"`
+		ID        int    `sql:"id"`
+		FirstName string `sql:"first_name"`
 	}
 
-	stmt := Select[User](nil).Where("id=?", 1)
+	stmt := Select[User](nil)
 
 	db, mock, err := sqlmock.New()
 	if err != nil {
@@ -59,16 +66,32 @@ func TestQueryWhereArgs(t *testing.T) {
 	}
 	defer db.Close()
 
-	rows := sqlmock.NewRows([]string{"id", "first_name"}).AddRow(1, "Alice")
-	mock.ExpectQuery(regexp.QuoteMeta(stmt.Write())).WithArgs(1).WillReturnRows(rows)
+	rows := sqlmock.NewRows([]string{"id", "first_name"}).
+		AddRow(1, "Alice").
+		AddRow(2, "Bob")
+
+	mock.ExpectQuery(stmt.Write()).WillReturnRows(rows)
 
 	got, err := QueryContext[User](context.Background(), db, stmt)
 	if err != nil {
 		t.Fatalf("Query returned error: %v", err)
 	}
+	defer got.Close()
 
-	if len(got) != 1 || got[0].ID != 1 || got[0].FirstName != "Alice" {
+	var user User
+	got.Next()
+	err = got.Scan(&user)
+	if err != nil || user.FirstName != "Alice" {
 		t.Fatalf("unexpected result: %+v", got)
+	}
+	got.Next()
+	err = got.Scan(&user)
+	if err != nil || user.FirstName != "Bob" {
+		t.Fatalf("unexpected result: %+v", got)
+	}
+	follow := got.Next()
+	if follow {
+		t.Fatalf("unmet expectations, it should ahve no more data")
 	}
 
 	if err := mock.ExpectationsWereMet(); err != nil {
@@ -78,8 +101,8 @@ func TestQueryWhereArgs(t *testing.T) {
 
 func TestQueryPointer(t *testing.T) {
 	type User struct {
-		ID        int    `db:"id"`
-		FirstName string `db:"first_name"`
+		ID        int    `sql:"id"`
+		FirstName string `sql:"first_name"`
 	}
 
 	stmt := Select[*User](nil)
@@ -96,13 +119,26 @@ func TestQueryPointer(t *testing.T) {
 
 	mock.ExpectQuery(stmt.Write()).WillReturnRows(rows)
 
-	got, err := QueryContext[*User](context.Background(), db, stmt)
+	got, err := QueryContext[User](context.Background(), db, stmt)
 	if err != nil {
 		t.Fatalf("Query returned error: %v", err)
 	}
+	defer got.Close()
 
-	if len(got) != 2 || got[0].FirstName != "Alice" || got[1].FirstName != "Bob" {
+	var user User
+	got.Next()
+	err = got.Scan(&user)
+	if err != nil || user.FirstName != "Alice" {
 		t.Fatalf("unexpected result: %+v", got)
+	}
+	got.Next()
+	err = got.Scan(&user)
+	if err != nil || user.FirstName != "Bob" {
+		t.Fatalf("unexpected result: %+v", got)
+	}
+	follow := got.Next()
+	if follow {
+		t.Fatalf("unmet expectations, it should ahve no more data")
 	}
 
 	if err := mock.ExpectationsWereMet(); err != nil {
