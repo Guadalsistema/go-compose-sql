@@ -2,7 +2,7 @@ name: Go test
 
 on:
   push:
-    - ["main"]
+    - "main"
   pull_request:
 
 jobs:
