@@ -67,6 +67,40 @@ func TestExecPointer(t *testing.T) {
 	}
 }
 
+func TestExecMultiple(t *testing.T) {
+	type User struct {
+		ID   int    `db:"id"`
+		Name string `db:"name"`
+	}
+
+	stmt := Insert[User](nil)
+
+	db, mock, err := sqlmock.New()
+	if err != nil {
+		t.Fatalf("sqlmock.New: %v", err)
+	}
+	defer db.Close()
+
+	u1 := User{ID: 1, Name: "Alice"}
+	u2 := User{ID: 2, Name: "Bob"}
+
+	mock.ExpectExec(regexp.QuoteMeta(stmt.Write())).
+		WithArgs(u1.ID, u1.Name).
+		WillReturnResult(sqlmock.NewResult(1, 1))
+
+	mock.ExpectExec(regexp.QuoteMeta(stmt.Write())).
+		WithArgs(u2.ID, u2.Name).
+		WillReturnResult(sqlmock.NewResult(2, 1))
+
+	if _, err := Exec(db, stmt, u1, u2); err != nil {
+		t.Fatalf("Exec returned error: %v", err)
+	}
+
+	if err := mock.ExpectationsWereMet(); err != nil {
+		t.Fatalf("unmet expectations: %v", err)
+	}
+}
+
 func TestExecContext(t *testing.T) {
 	type User struct {
 		ID int `db:"id"`
