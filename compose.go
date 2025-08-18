@@ -31,6 +31,8 @@ type SqlClause struct {
 	TableName   string
 	ColumnNames []string
 	ModelType   reflect.Type
+	WhereExpr   string
+	WhereArgs   []any
 }
 
 func getTableName(def string, opts *SqlOpts) string {
@@ -146,10 +148,23 @@ func (c SqlClause) Write() string {
 		return fmt.Sprintf("INSERT INTO %s (%s) VALUES (%s);", c.TableName, cols, placeholders)
 	case ClauseSelect:
 		cols := strings.Join(c.ColumnNames, ", ")
+		if c.WhereExpr != "" {
+			return fmt.Sprintf("SELECT %s FROM %s WHERE %s;", cols, c.TableName, c.WhereExpr)
+		}
 		return fmt.Sprintf("SELECT %s FROM %s;", cols, c.TableName)
 	case ClauseDelete:
+		if c.WhereExpr != "" {
+			return fmt.Sprintf("DELETE FROM %s WHERE %s;", c.TableName, c.WhereExpr)
+		}
 		return fmt.Sprintf("DELETE FROM %s;", c.TableName)
 	default:
 		return ""
 	}
+}
+
+// Where returns a copy of the clause with a WHERE expression and args applied.
+func (c SqlClause) Where(expr string, args ...any) SqlClause {
+	c.WhereExpr = expr
+	c.WhereArgs = args
+	return c
 }

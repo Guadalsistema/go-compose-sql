@@ -20,7 +20,7 @@ func Query[T any](ctx context.Context, db *sql.DB, clause SqlClause) ([]T, error
 		return nil, fmt.Errorf("sqlcompose: Query requires a SELECT clause")
 	}
 
-	rows, err := db.QueryContext(ctx, clause.Write())
+	rows, err := db.QueryContext(ctx, clause.Write(), clause.WhereArgs...)
 	if err != nil {
 		return nil, err
 	}
