@@ -10,6 +10,7 @@ import (
 // SqlOpts contains optional settings for building SQL clauses.
 type SqlOpts struct {
 	TableName string
+	Fields    []string
 }
 
 // SQLStatement represents a sequence of SQL clauses forming a statement.
@@ -106,6 +107,14 @@ func Select[T any](opts *SqlOpts) SQLStatement {
 	tableName := getTableName(sqlstruct.ToSnakeCase(typ.Name()), opts)
 
 	var names []string
+	var fieldFilter map[string]struct{}
+	if opts != nil && len(opts.Fields) > 0 {
+		fieldFilter = make(map[string]struct{}, len(opts.Fields))
+		for _, f := range opts.Fields {
+			fieldFilter[f] = struct{}{}
+		}
+	}
+
 	for i := 0; i < typ.NumField(); i++ {
 		f := typ.Field(i)
 		if f.PkgPath != "" {
@@ -117,6 +126,11 @@ func Select[T any](opts *SqlOpts) SQLStatement {
 		}
 		if tag == "" {
 			tag = sqlstruct.ToSnakeCase(f.Name)
+		}
+		if fieldFilter != nil {
+			if _, ok := fieldFilter[tag]; !ok {
+				continue
+			}
 		}
 		names = append(names, tag)
 	}
