@@ -44,6 +44,36 @@ func (s SQLStatement) Where(expr string, args ...any) SQLStatement {
 	return s
 }
 
+// OrderBy appends an ORDER BY clause to the statement.
+func (s SQLStatement) OrderBy(columns ...string) SQLStatement {
+	s.Clauses = append(s.Clauses, SqlClause{Type: ClauseOrderBy, ColumnNames: columns})
+	return s
+}
+
+// Limit appends a LIMIT clause to the statement.
+func (s SQLStatement) Limit(n int) SQLStatement {
+	s.Clauses = append(s.Clauses, SqlClause{Type: ClauseLimit, Args: []any{n}})
+	return s
+}
+
+// Desc appends a DESC clause ensuring it follows an ORDER BY clause.
+func (s SQLStatement) Desc() SQLStatement {
+	if len(s.Clauses) == 0 || s.Clauses[len(s.Clauses)-1].Type != ClauseOrderBy {
+		panic("DESC must follow ORDER BY clause")
+	}
+	s.Clauses = append(s.Clauses, SqlClause{Type: ClauseDesc})
+	return s
+}
+
+// Asc appends an ASC clause ensuring it follows an ORDER BY clause.
+func (s SQLStatement) Asc() SQLStatement {
+	if len(s.Clauses) == 0 || s.Clauses[len(s.Clauses)-1].Type != ClauseOrderBy {
+		panic("ASC must follow ORDER BY clause")
+	}
+	s.Clauses = append(s.Clauses, SqlClause{Type: ClauseAsc})
+	return s
+}
+
 func getTableName(def string, opts *SqlOpts) string {
 	tableName := def
 	if opts != nil && opts.TableName != "" {
