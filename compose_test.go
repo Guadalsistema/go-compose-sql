@@ -49,6 +49,19 @@ func TestSelect(t *testing.T) {
 	}
 }
 
+func TestSelectWhere(t *testing.T) {
+	type User struct {
+		ID        int    `db:"id"`
+		FirstName string `db:"first_name"`
+	}
+
+	clause := Select[User](nil).Where("id=?", 1)
+	expected := "SELECT id, first_name FROM user WHERE id=?;"
+	if got := clause.Write(); got != expected {
+		t.Fatalf("unexpected SQL: %s", got)
+	}
+}
+
 func TestDelete(t *testing.T) {
 	type User struct{}
 

@@ -3,6 +3,7 @@ package sqlcompose
 import (
 	"context"
 	"reflect"
+	"regexp"
 	"testing"
 
 	"github.com/DATA-DOG/go-sqlmock"
@@ -36,6 +37,37 @@ func TestQuery(t *testing.T) {
 
 	want := []User{{1, "Alice", "Smith"}, {2, "Bob", "Jones"}}
 	if !reflect.DeepEqual(got, want) {
+		t.Fatalf("unexpected result: %+v", got)
+	}
+
+	if err := mock.ExpectationsWereMet(); err != nil {
+		t.Fatalf("unmet expectations: %v", err)
+	}
+}
+
+func TestQueryWhereArgs(t *testing.T) {
+	type User struct {
+		ID        int    `db:"id"`
+		FirstName string `db:"first_name"`
+	}
+
+	clause := Select[User](nil).Where("id=?", 1)
+
+	db, mock, err := sqlmock.New()
+	if err != nil {
+		t.Fatalf("sqlmock.New: %v", err)
+	}
+	defer db.Close()
+
+	rows := sqlmock.NewRows([]string{"id", "first_name"}).AddRow(1, "Alice")
+	mock.ExpectQuery(regexp.QuoteMeta(clause.Write())).WithArgs(1).WillReturnRows(rows)
+
+	got, err := Query[User](context.Background(), db, clause)
+	if err != nil {
+		t.Fatalf("Query returned error: %v", err)
+	}
+
+	if len(got) != 1 || got[0].ID != 1 || got[0].FirstName != "Alice" {
 		t.Fatalf("unexpected result: %+v", got)
 	}
 
