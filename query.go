@@ -9,7 +9,7 @@ import (
 	"github.com/kisielk/sqlstruct"
 )
 
-func Query[T any](ctx context.Context, db *sql.DB, stmt SQLStatement) (*QueryRowIterator[T], error) {
+func Query[T any](db *sql.DB, stmt SQLStatement) (*QueryRowIterator[T], error) {
 	return QueryContext[T](context.Background(), db, stmt)
 }
 
