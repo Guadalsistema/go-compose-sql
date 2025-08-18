@@ -21,19 +21,24 @@ type SqlOpts struct {
 }
 
 // SqlClause represents a SQL statement before rendering.
+//
+// ModelType retains the generic type used when building the clause so that
+// values can later be mapped to columns when executing the statement.
 type SqlClause struct {
 	Type        ClauseType
 	TableName   string
 	ColumnNames []string
+	ModelType   reflect.Type
 }
 
-// Insert builds an INSERT clause based on the supplied struct and options.
+// Insert builds an INSERT clause for type T using the provided options.
 //
 // Fields are mapped to column names using the `db` struct tag; if absent, the
 // field name is converted to snake_case. The table name defaults to the struct
-// type name converted to snake_case when opts.TableName is empty.
-func Insert[T any](columns T, opts SqlOpts) SqlClause {
-	typ := reflect.TypeOf(columns)
+// type name converted to snake_case when opts.TableName is empty. The reflected
+// type is stored in the resulting SqlClause.
+func Insert[T any](opts SqlOpts) SqlClause {
+	typ := reflect.TypeOf((*T)(nil)).Elem()
 	for typ.Kind() == reflect.Pointer {
 		typ = typ.Elem()
 	}
@@ -64,14 +69,16 @@ func Insert[T any](columns T, opts SqlOpts) SqlClause {
 		Type:        ClauseInsert,
 		TableName:   tableName,
 		ColumnNames: names,
+		ModelType:   typ,
 	}
 }
 
-// Select builds a SELECT clause listing all exported fields from the struct.
+// Select builds a SELECT clause listing all exported fields of type T.
 //
-// Column names and table name follow the same rules as Insert.
-func Select[T any](model T, opts SqlOpts) SqlClause {
-	typ := reflect.TypeOf(model)
+// Column names and table name follow the same rules as Insert. The reflected
+// type is stored in the resulting SqlClause.
+func Select[T any](opts SqlOpts) SqlClause {
+	typ := reflect.TypeOf((*T)(nil)).Elem()
 	for typ.Kind() == reflect.Pointer {
 		typ = typ.Elem()
 	}
@@ -101,15 +108,17 @@ func Select[T any](model T, opts SqlOpts) SqlClause {
 		Type:        ClauseSelect,
 		TableName:   tableName,
 		ColumnNames: names,
+		ModelType:   typ,
 	}
 }
 
-// Delete builds a DELETE clause for the given struct type.
+// Delete builds a DELETE clause for type T.
 //
 // The table name defaults to the struct type name converted to snake_case when
-// opts.TableName is empty.
-func Delete[T any](model T, opts SqlOpts) SqlClause {
-	typ := reflect.TypeOf(model)
+// opts.TableName is empty. The reflected type is stored in the resulting
+// SqlClause.
+func Delete[T any](opts SqlOpts) SqlClause {
+	typ := reflect.TypeOf((*T)(nil)).Elem()
 	for typ.Kind() == reflect.Pointer {
 		typ = typ.Elem()
 	}
@@ -122,6 +131,7 @@ func Delete[T any](model T, opts SqlOpts) SqlClause {
 	return SqlClause{
 		Type:      ClauseDelete,
 		TableName: tableName,
+		ModelType: typ,
 	}
 }
 

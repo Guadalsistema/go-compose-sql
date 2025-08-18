@@ -1,6 +1,9 @@
 package sqlcompose
 
-import "testing"
+import (
+	"reflect"
+	"testing"
+)
 
 func TestInsert(t *testing.T) {
 	type User struct {
@@ -9,10 +12,13 @@ func TestInsert(t *testing.T) {
 		LastName  string `db:"last_name"`
 	}
 
-	clause := Insert(User{}, SqlOpts{})
+	clause := Insert[User](SqlOpts{})
 	expected := "INSERT INTO user (id, first_name, last_name) VALUES (?, ?, ?);"
 	if got := clause.Write(); got != expected {
 		t.Fatalf("unexpected SQL: %s", got)
+	}
+	if clause.ModelType != reflect.TypeOf(User{}) {
+		t.Fatalf("unexpected model type: %v", clause.ModelType)
 	}
 }
 
@@ -21,7 +27,7 @@ func TestInsertWithTableOpt(t *testing.T) {
 		Name string
 	}
 
-	clause := Insert(Widget{}, SqlOpts{TableName: "widgets"})
+	clause := Insert[Widget](SqlOpts{TableName: "widgets"})
 	expected := "INSERT INTO widgets (name) VALUES (?);"
 	if got := clause.Write(); got != expected {
 		t.Fatalf("unexpected SQL with table opt: %s", got)
@@ -34,7 +40,7 @@ func TestSelect(t *testing.T) {
 		FirstName string
 	}
 
-	clause := Select(User{}, SqlOpts{})
+	clause := Select[User](SqlOpts{})
 	expected := "SELECT id, first_name FROM user;"
 	if got := clause.Write(); got != expected {
 		t.Fatalf("unexpected SQL: %s", got)
@@ -44,7 +50,7 @@ func TestSelect(t *testing.T) {
 func TestDelete(t *testing.T) {
 	type User struct{}
 
-	clause := Delete(User{}, SqlOpts{})
+	clause := Delete[User](SqlOpts{})
 	expected := "DELETE FROM user;"
 	if got := clause.Write(); got != expected {
 		t.Fatalf("unexpected SQL: %s", got)
