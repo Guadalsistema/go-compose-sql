@@ -5,6 +5,8 @@ import (
 	"database/sql"
 	"fmt"
 	"reflect"
+
+	"github.com/kisielk/sqlstruct"
 )
 
 // Query executes the SELECT SqlClause against the provided database and scans
@@ -29,29 +31,14 @@ func Query[T any](ctx context.Context, db *sql.DB, clause SqlClause) ([]T, error
 
 	var out []T
 	for rows.Next() {
-		// Create a new value of the model type and prepare destinations for Scan.
 		pv := reflect.New(clause.ModelType)
-		val := pv.Elem()
-		var dest []any
-		for i := 0; i < clause.ModelType.NumField(); i++ {
-			f := clause.ModelType.Field(i)
-			if f.PkgPath != "" {
-				continue // skip unexported fields
-			}
-			if f.Tag.Get("db") == "-" {
-				continue
-			}
-			dest = append(dest, val.Field(i).Addr().Interface())
-		}
-
-		if err := rows.Scan(dest...); err != nil {
+		if err := sqlstruct.Scan(pv.Interface(), rows); err != nil {
 			return nil, err
 		}
-
 		if isPtr {
 			out = append(out, pv.Interface().(T))
 		} else {
-			out = append(out, val.Interface().(T))
+			out = append(out, pv.Elem().Interface().(T))
 		}
 	}
 

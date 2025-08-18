@@ -4,6 +4,8 @@ import (
 	"fmt"
 	"reflect"
 	"strings"
+
+	"github.com/kisielk/sqlstruct"
 )
 
 // ClauseType represents a SQL operation like INSERT or UPDATE.
@@ -52,7 +54,7 @@ func Insert[T any](opts *SqlOpts) SqlClause {
 		typ = typ.Elem()
 	}
 
-	tableName := getTableName(toSnakeCase(typ.Name()), opts)
+	tableName := getTableName(sqlstruct.ToSnakeCase(typ.Name()), opts)
 
 	var names []string
 	for i := 0; i < typ.NumField(); i++ {
@@ -66,7 +68,7 @@ func Insert[T any](opts *SqlOpts) SqlClause {
 			continue
 		}
 		if tag == "" {
-			tag = toSnakeCase(f.Name)
+			tag = sqlstruct.ToSnakeCase(f.Name)
 		}
 		names = append(names, tag)
 	}
@@ -89,7 +91,7 @@ func Select[T any](opts *SqlOpts) SqlClause {
 		typ = typ.Elem()
 	}
 
-	tableName := getTableName(toSnakeCase(typ.Name()), opts)
+	tableName := getTableName(sqlstruct.ToSnakeCase(typ.Name()), opts)
 
 	var names []string
 	for i := 0; i < typ.NumField(); i++ {
@@ -102,7 +104,7 @@ func Select[T any](opts *SqlOpts) SqlClause {
 			continue
 		}
 		if tag == "" {
-			tag = toSnakeCase(f.Name)
+			tag = sqlstruct.ToSnakeCase(f.Name)
 		}
 		names = append(names, tag)
 	}
@@ -126,7 +128,7 @@ func Delete[T any](opts *SqlOpts) SqlClause {
 		typ = typ.Elem()
 	}
 
-	tableName := getTableName(toSnakeCase(typ.Name()), opts)
+	tableName := getTableName(sqlstruct.ToSnakeCase(typ.Name()), opts)
 
 	return SqlClause{
 		Type:      ClauseDelete,
@@ -150,16 +152,4 @@ func (c SqlClause) Write() string {
 	default:
 		return ""
 	}
-}
-
-// toSnakeCase converts CamelCase strings to snake_case.
-func toSnakeCase(s string) string {
-	var out []rune
-	for i, r := range s {
-		if i > 0 && r >= 'A' && r <= 'Z' {
-			out = append(out, '_')
-		}
-		out = append(out, rune(strings.ToLower(string(r))[0]))
-	}
-	return string(out)
 }
