@@ -3,6 +3,8 @@ package sqlcompose
 import (
 	"reflect"
 	"testing"
+
+	"github.com/kisielk/sqlstruct"
 )
 
 func TestInsert(t *testing.T) {
@@ -61,11 +63,11 @@ func TestSnakeCase(t *testing.T) {
 	cases := map[string]string{
 		"User":       "user",
 		"UserRole":   "user_role",
-		"HTTPServer": "h_t_t_p_server",
+		"HTTPServer": "httpserver",
 	}
 	for in, want := range cases {
-		if got := toSnakeCase(in); got != want {
-			t.Fatalf("toSnakeCase(%q)=%q; want %q", in, got, want)
+		if got := sqlstruct.ToSnakeCase(in); got != want {
+			t.Fatalf("ToSnakeCase(%q)=%q; want %q", in, got, want)
 		}
 	}
 }
