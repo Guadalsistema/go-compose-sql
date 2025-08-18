@@ -10,11 +10,15 @@ import (
 type ClauseType string
 
 const (
-	ClauseInsert ClauseType = "INSERT"
-	ClauseSelect ClauseType = "SELECT"
-	ClauseUpdate ClauseType = "UPDATE"
-	ClauseDelete ClauseType = "DELETE"
-	ClauseWhere  ClauseType = "WHERE"
+	ClauseInsert  ClauseType = "INSERT"
+	ClauseSelect  ClauseType = "SELECT"
+	ClauseUpdate  ClauseType = "UPDATE"
+	ClauseDelete  ClauseType = "DELETE"
+	ClauseWhere   ClauseType = "WHERE"
+	ClauseOrderBy ClauseType = "ORDER BY"
+	ClauseLimit   ClauseType = "LIMIT"
+	ClauseDesc    ClauseType = "DESC"
+	ClauseAsc     ClauseType = "ASC"
 )
 
 // SqlClause represents a SQL statement before rendering.
@@ -44,6 +48,15 @@ func (c SqlClause) Write() string {
 		return fmt.Sprintf("DELETE FROM %s", c.TableName)
 	case ClauseWhere:
 		return fmt.Sprintf("WHERE %s", c.Expr)
+	case ClauseOrderBy:
+		cols := strings.Join(c.ColumnNames, ", ")
+		return fmt.Sprintf("ORDER BY %s", cols)
+	case ClauseLimit:
+		return "LIMIT ?"
+	case ClauseDesc:
+		return "DESC"
+	case ClauseAsc:
+		return "ASC"
 	default:
 		return ""
 	}
