@@ -71,3 +71,43 @@ func QueryContext[T any](ctx context.Context, db *sql.DB, stmt SQLStatement) (*Q
 		model: first.ModelType,
 	}, nil
 }
+
+// QueryOne executes the SELECT SQLStatement against the provided database using
+// context.Background(). It delegates to QueryOneContext.
+func QueryOne[T any](db *sql.DB, stmt SQLStatement) (T, error) {
+	return QueryOneContext[T](context.Background(), db, stmt)
+}
+
+// QueryOneContext executes the SELECT SQLStatement against the provided database
+// using the supplied context and returns exactly one row. If the query returns
+// zero or more than one row, it returns an error.
+func QueryOneContext[T any](ctx context.Context, db *sql.DB, stmt SQLStatement) (T, error) {
+	var zero T
+
+	iter, err := QueryContext[T](ctx, db, stmt)
+	if err != nil {
+		return zero, err
+	}
+	defer iter.Close()
+
+	if !iter.Next() {
+		if err := iter.Err(); err != nil {
+			return zero, err
+		}
+		return zero, sql.ErrNoRows
+	}
+
+	var result T
+	if err := iter.Scan(&result); err != nil {
+		return zero, err
+	}
+
+	if iter.Next() {
+		return zero, fmt.Errorf("sqlcompose: QueryOne requires exactly one row")
+	}
+	if err := iter.Err(); err != nil {
+		return zero, err
+	}
+
+	return result, nil
+}
