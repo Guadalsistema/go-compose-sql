@@ -15,7 +15,7 @@ func TestExec(t *testing.T) {
 		LastName  string `db:"last_name"`
 	}
 
-	clause := Insert[User](nil)
+	stmt := Insert[User](nil)
 
 	db, mock, err := sqlmock.New()
 	if err != nil {
@@ -25,11 +25,11 @@ func TestExec(t *testing.T) {
 
 	u := User{1, "Alice", "Smith"}
 
-	mock.ExpectExec(regexp.QuoteMeta(clause.Write())).
+	mock.ExpectExec(regexp.QuoteMeta(stmt.Write())).
 		WithArgs(u.ID, u.FirstName, u.LastName).
 		WillReturnResult(sqlmock.NewResult(1, 1))
 
-	if _, err := Exec(db, clause, u); err != nil {
+	if _, err := Exec(db, stmt, u); err != nil {
 		t.Fatalf("Exec returned error: %v", err)
 	}
 
@@ -44,7 +44,7 @@ func TestExecPointer(t *testing.T) {
 		Name string `db:"name"`
 	}
 
-	clause := Insert[User](nil)
+	stmt := Insert[User](nil)
 
 	db, mock, err := sqlmock.New()
 	if err != nil {
@@ -54,11 +54,11 @@ func TestExecPointer(t *testing.T) {
 
 	u := &User{ID: 5, Name: "Bob"}
 
-	mock.ExpectExec(regexp.QuoteMeta(clause.Write())).
+	mock.ExpectExec(regexp.QuoteMeta(stmt.Write())).
 		WithArgs(u.ID, u.Name).
 		WillReturnResult(sqlmock.NewResult(1, 1))
 
-	if _, err := Exec(db, clause, u); err != nil {
+	if _, err := Exec(db, stmt, u); err != nil {
 		t.Fatalf("Exec returned error: %v", err)
 	}
 
@@ -72,7 +72,7 @@ func TestExecContext(t *testing.T) {
 		ID int `db:"id"`
 	}
 
-	clause := Insert[User](nil)
+	stmt := Insert[User](nil)
 
 	db, mock, err := sqlmock.New()
 	if err != nil {
@@ -82,11 +82,11 @@ func TestExecContext(t *testing.T) {
 
 	u := User{ID: 10}
 
-	mock.ExpectExec(regexp.QuoteMeta(clause.Write())).
+	mock.ExpectExec(regexp.QuoteMeta(stmt.Write())).
 		WithArgs(u.ID).
 		WillReturnResult(sqlmock.NewResult(1, 1))
 
-	if _, err := ExecContext(context.Background(), db, clause, u); err != nil {
+	if _, err := ExecContext(context.Background(), db, stmt, u); err != nil {
 		t.Fatalf("ExecContext returned error: %v", err)
 	}
 
@@ -97,7 +97,7 @@ func TestExecContext(t *testing.T) {
 
 func TestExecNonInsert(t *testing.T) {
 	type User struct{ ID int }
-	clause := Select[User](nil)
+	stmt := Select[User](nil)
 
 	db, _, err := sqlmock.New()
 	if err != nil {
@@ -105,7 +105,7 @@ func TestExecNonInsert(t *testing.T) {
 	}
 	defer db.Close()
 
-	if _, err := Exec(db, clause, User{ID: 1}); err == nil {
+	if _, err := Exec(db, stmt, User{ID: 1}); err == nil {
 		t.Fatalf("expected error for non-insert clause")
 	}
 }

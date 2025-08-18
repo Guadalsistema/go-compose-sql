@@ -14,13 +14,13 @@ func TestInsert(t *testing.T) {
 		LastName  string `db:"last_name"`
 	}
 
-	clause := Insert[User](nil)
+	stmt := Insert[User](nil)
 	expected := "INSERT INTO user (id, first_name, last_name) VALUES (?, ?, ?);"
-	if got := clause.Write(); got != expected {
+	if got := stmt.Write(); got != expected {
 		t.Fatalf("unexpected SQL: %s", got)
 	}
-	if clause.ModelType != reflect.TypeOf(User{}) {
-		t.Fatalf("unexpected model type: %v", clause.ModelType)
+	if stmt.Clauses[0].ModelType != reflect.TypeOf(User{}) {
+		t.Fatalf("unexpected model type: %v", stmt.Clauses[0].ModelType)
 	}
 }
 
@@ -29,9 +29,9 @@ func TestInsertWithTableOpt(t *testing.T) {
 		Name string
 	}
 
-	clause := Insert[Widget](&SqlOpts{TableName: "widgets"})
+	stmt := Insert[Widget](&SqlOpts{TableName: "widgets"})
 	expected := "INSERT INTO widgets (name) VALUES (?);"
-	if got := clause.Write(); got != expected {
+	if got := stmt.Write(); got != expected {
 		t.Fatalf("unexpected SQL with table opt: %s", got)
 	}
 }
@@ -42,9 +42,9 @@ func TestSelect(t *testing.T) {
 		FirstName string
 	}
 
-	clause := Select[User](nil)
+	stmt := Select[User](nil)
 	expected := "SELECT id, first_name FROM user;"
-	if got := clause.Write(); got != expected {
+	if got := stmt.Write(); got != expected {
 		t.Fatalf("unexpected SQL: %s", got)
 	}
 }
@@ -55,9 +55,9 @@ func TestSelectWhere(t *testing.T) {
 		FirstName string `db:"first_name"`
 	}
 
-	clause := Select[User](nil).Where("id=?", 1)
+	stmt := Select[User](nil).Where("id=?", 1)
 	expected := "SELECT id, first_name FROM user WHERE id=?;"
-	if got := clause.Write(); got != expected {
+	if got := stmt.Write(); got != expected {
 		t.Fatalf("unexpected SQL: %s", got)
 	}
 }
@@ -65,9 +65,9 @@ func TestSelectWhere(t *testing.T) {
 func TestDelete(t *testing.T) {
 	type User struct{}
 
-	clause := Delete[User](nil)
+	stmt := Delete[User](nil)
 	expected := "DELETE FROM user;"
-	if got := clause.Write(); got != expected {
+	if got := stmt.Write(); got != expected {
 		t.Fatalf("unexpected SQL: %s", got)
 	}
 }
