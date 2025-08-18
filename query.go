@@ -9,22 +9,24 @@ import (
 	"github.com/kisielk/sqlstruct"
 )
 
-func Query[T any](ctx context.Context, db *sql.DB, clause SqlClause) ([]T, error) {
-	return QueryContext[T](context.Background(), db, clause)
+func Query[T any](ctx context.Context, db *sql.DB, stmt SQLStatement) ([]T, error) {
+	return QueryContext[T](context.Background(), db, stmt)
 }
 
-// Query executes the SELECT SqlClause against the provided database and scans
+// Query executes the SELECT SQLStatement against the provided database and scans
 // the resulting rows into a slice of T.
 //
-// The SqlClause must be built using Select[T] so that ModelType and ColumnNames
-// match the fields in T. Query returns an error if the clause is not a SELECT
-// clause.
-func QueryContext[T any](ctx context.Context, db *sql.DB, clause SqlClause) ([]T, error) {
-	if clause.Type != ClauseSelect {
+// The first clause must be built using Select[T] so that ModelType and
+// ColumnNames match the fields in T. Query returns an error if the first clause
+// is not a SELECT clause.
+func QueryContext[T any](ctx context.Context, db *sql.DB, stmt SQLStatement) ([]T, error) {
+	if len(stmt.Clauses) == 0 || stmt.Clauses[0].Type != ClauseSelect {
 		return nil, fmt.Errorf("sqlcompose: Query requires a SELECT clause")
 	}
 
-	rows, err := db.QueryContext(ctx, clause.Write(), clause.WhereArgs...)
+	first := stmt.Clauses[0]
+
+	rows, err := db.QueryContext(ctx, stmt.Write(), stmt.Args()...)
 	if err != nil {
 		return nil, err
 	}
@@ -35,7 +37,7 @@ func QueryContext[T any](ctx context.Context, db *sql.DB, clause SqlClause) ([]T
 
 	var out []T
 	for rows.Next() {
-		pv := reflect.New(clause.ModelType)
+		pv := reflect.New(first.ModelType)
 		if err := sqlstruct.Scan(pv.Interface(), rows); err != nil {
 			return nil, err
 		}

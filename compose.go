@@ -14,7 +14,9 @@ type ClauseType string
 const (
 	ClauseInsert ClauseType = "INSERT"
 	ClauseSelect ClauseType = "SELECT"
+	ClauseUpdate ClauseType = "UPDATE"
 	ClauseDelete ClauseType = "DELETE"
+	ClauseWhere  ClauseType = "WHERE"
 )
 
 // SqlOpts contains optional settings for building SQL clauses.
@@ -31,8 +33,40 @@ type SqlClause struct {
 	TableName   string
 	ColumnNames []string
 	ModelType   reflect.Type
-	WhereExpr   string
-	WhereArgs   []any
+	Expr        string
+	Args        []any
+}
+
+// SQLStatement represents a sequence of SQL clauses forming a statement.
+type SQLStatement struct {
+	Clauses []SqlClause
+}
+
+// Write renders the complete SQL statement by concatenating all clauses.
+func (s SQLStatement) Write() string {
+	var parts []string
+	for _, c := range s.Clauses {
+		parts = append(parts, c.Write())
+	}
+	if len(parts) == 0 {
+		return ""
+	}
+	return strings.Join(parts, " ") + ";"
+}
+
+// Args returns the collected arguments from all clauses in the statement.
+func (s SQLStatement) Args() []any {
+	var out []any
+	for _, c := range s.Clauses {
+		out = append(out, c.Args...)
+	}
+	return out
+}
+
+// Where appends a WHERE clause to the statement.
+func (s SQLStatement) Where(expr string, args ...any) SQLStatement {
+	s.Clauses = append(s.Clauses, SqlClause{Type: ClauseWhere, Expr: expr, Args: args})
+	return s
 }
 
 func getTableName(def string, opts *SqlOpts) string {
@@ -44,13 +78,13 @@ func getTableName(def string, opts *SqlOpts) string {
 	return tableName
 }
 
-// Insert builds an INSERT clause for type T using the provided options.
+// Insert builds an INSERT statement for type T using the provided options.
 //
 // Fields are mapped to column names using the `db` struct tag; if absent, the
 // field name is converted to snake_case. The table name defaults to the struct
 // type name converted to snake_case when opts.TableName is empty. The reflected
-// type is stored in the resulting SqlClause.
-func Insert[T any](opts *SqlOpts) SqlClause {
+// type is stored in the resulting clause.
+func Insert[T any](opts *SqlOpts) SQLStatement {
 	typ := reflect.TypeOf((*T)(nil)).Elem()
 	for typ.Kind() == reflect.Pointer {
 		typ = typ.Elem()
@@ -75,19 +109,20 @@ func Insert[T any](opts *SqlOpts) SqlClause {
 		names = append(names, tag)
 	}
 
-	return SqlClause{
+	clause := SqlClause{
 		Type:        ClauseInsert,
 		TableName:   tableName,
 		ColumnNames: names,
 		ModelType:   typ,
 	}
+	return SQLStatement{Clauses: []SqlClause{clause}}
 }
 
-// Select builds a SELECT clause listing all exported fields of type T.
+// Select builds a SELECT statement listing all exported fields of type T.
 //
 // Column names and table name follow the same rules as Insert. The reflected
-// type is stored in the resulting SqlClause.
-func Select[T any](opts *SqlOpts) SqlClause {
+// type is stored in the resulting clause.
+func Select[T any](opts *SqlOpts) SQLStatement {
 	typ := reflect.TypeOf((*T)(nil)).Elem()
 	for typ.Kind() == reflect.Pointer {
 		typ = typ.Elem()
@@ -111,20 +146,20 @@ func Select[T any](opts *SqlOpts) SqlClause {
 		names = append(names, tag)
 	}
 
-	return SqlClause{
+	clause := SqlClause{
 		Type:        ClauseSelect,
 		TableName:   tableName,
 		ColumnNames: names,
 		ModelType:   typ,
 	}
+	return SQLStatement{Clauses: []SqlClause{clause}}
 }
 
-// Delete builds a DELETE clause for type T.
+// Delete builds a DELETE statement for type T.
 //
 // The table name defaults to the struct type name converted to snake_case when
-// opts.TableName is empty. The reflected type is stored in the resulting
-// SqlClause.
-func Delete[T any](opts *SqlOpts) SqlClause {
+// opts.TableName is empty. The reflected type is stored in the resulting clause.
+func Delete[T any](opts *SqlOpts) SQLStatement {
 	typ := reflect.TypeOf((*T)(nil)).Elem()
 	for typ.Kind() == reflect.Pointer {
 		typ = typ.Elem()
@@ -132,39 +167,29 @@ func Delete[T any](opts *SqlOpts) SqlClause {
 
 	tableName := getTableName(sqlstruct.ToSnakeCase(typ.Name()), opts)
 
-	return SqlClause{
+	clause := SqlClause{
 		Type:      ClauseDelete,
 		TableName: tableName,
 		ModelType: typ,
 	}
+	return SQLStatement{Clauses: []SqlClause{clause}}
 }
 
-// Write renders the SQL clause to a string.
+// Write renders an individual SQL clause to a string.
 func (c SqlClause) Write() string {
 	switch c.Type {
 	case ClauseInsert:
 		cols := strings.Join(c.ColumnNames, ", ")
 		placeholders := strings.TrimRight(strings.Repeat("?, ", len(c.ColumnNames)), ", ")
-		return fmt.Sprintf("INSERT INTO %s (%s) VALUES (%s);", c.TableName, cols, placeholders)
+		return fmt.Sprintf("INSERT INTO %s (%s) VALUES (%s)", c.TableName, cols, placeholders)
 	case ClauseSelect:
 		cols := strings.Join(c.ColumnNames, ", ")
-		if c.WhereExpr != "" {
-			return fmt.Sprintf("SELECT %s FROM %s WHERE %s;", cols, c.TableName, c.WhereExpr)
-		}
-		return fmt.Sprintf("SELECT %s FROM %s;", cols, c.TableName)
+		return fmt.Sprintf("SELECT %s FROM %s", cols, c.TableName)
 	case ClauseDelete:
-		if c.WhereExpr != "" {
-			return fmt.Sprintf("DELETE FROM %s WHERE %s;", c.TableName, c.WhereExpr)
-		}
-		return fmt.Sprintf("DELETE FROM %s;", c.TableName)
+		return fmt.Sprintf("DELETE FROM %s", c.TableName)
+	case ClauseWhere:
+		return fmt.Sprintf("WHERE %s", c.Expr)
 	default:
 		return ""
 	}
-}
-
-// Where returns a copy of the clause with a WHERE expression and args applied.
-func (c SqlClause) Where(expr string, args ...any) SqlClause {
-	c.WhereExpr = expr
-	c.WhereArgs = args
-	return c
 }
