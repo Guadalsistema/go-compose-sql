@@ -2,8 +2,18 @@ name: Go test
 
 on:
   push:
-    - "main"
+    branches: ["main"]
+    paths-ignore:
+      - 'docs/**'
+      - 'README.md'
+      - 'AGENTS.md'
+      - '**/*.md'
   pull_request:
+    paths-ignore:
+      - 'docs/**'
+      - 'README.md'
+      - 'AGENTS.md'
+      - '**/*.md'
 
 jobs:
   build:
