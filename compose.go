@@ -31,22 +31,28 @@ type SqlClause struct {
 	ModelType   reflect.Type
 }
 
+func getTableName(def string, opts *SqlOpts) string {
+	tableName := def
+	if opts != nil && opts.TableName != "" {
+		tableName = opts.TableName
+
+	}
+	return tableName
+}
+
 // Insert builds an INSERT clause for type T using the provided options.
 //
 // Fields are mapped to column names using the `db` struct tag; if absent, the
 // field name is converted to snake_case. The table name defaults to the struct
 // type name converted to snake_case when opts.TableName is empty. The reflected
 // type is stored in the resulting SqlClause.
-func Insert[T any](opts SqlOpts) SqlClause {
+func Insert[T any](opts *SqlOpts) SqlClause {
 	typ := reflect.TypeOf((*T)(nil)).Elem()
 	for typ.Kind() == reflect.Pointer {
 		typ = typ.Elem()
 	}
 
-	tableName := opts.TableName
-	if tableName == "" {
-		tableName = toSnakeCase(typ.Name())
-	}
+	tableName := getTableName(toSnakeCase(typ.Name()), opts)
 
 	var names []string
 	for i := 0; i < typ.NumField(); i++ {
@@ -77,16 +83,13 @@ func Insert[T any](opts SqlOpts) SqlClause {
 //
 // Column names and table name follow the same rules as Insert. The reflected
 // type is stored in the resulting SqlClause.
-func Select[T any](opts SqlOpts) SqlClause {
+func Select[T any](opts *SqlOpts) SqlClause {
 	typ := reflect.TypeOf((*T)(nil)).Elem()
 	for typ.Kind() == reflect.Pointer {
 		typ = typ.Elem()
 	}
 
-	tableName := opts.TableName
-	if tableName == "" {
-		tableName = toSnakeCase(typ.Name())
-	}
+	tableName := getTableName(toSnakeCase(typ.Name()), opts)
 
 	var names []string
 	for i := 0; i < typ.NumField(); i++ {
@@ -117,16 +120,13 @@ func Select[T any](opts SqlOpts) SqlClause {
 // The table name defaults to the struct type name converted to snake_case when
 // opts.TableName is empty. The reflected type is stored in the resulting
 // SqlClause.
-func Delete[T any](opts SqlOpts) SqlClause {
+func Delete[T any](opts *SqlOpts) SqlClause {
 	typ := reflect.TypeOf((*T)(nil)).Elem()
 	for typ.Kind() == reflect.Pointer {
 		typ = typ.Elem()
 	}
 
-	tableName := opts.TableName
-	if tableName == "" {
-		tableName = toSnakeCase(typ.Name())
-	}
+	tableName := getTableName(toSnakeCase(typ.Name()), opts)
 
 	return SqlClause{
 		Type:      ClauseDelete,
