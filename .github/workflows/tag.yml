@@ -3,6 +3,11 @@ name: Auto tag
 on:
   push:
     branches: ["main"]
+    paths-ignore:
+      - 'docs/**'
+      - 'README.md'
+      - 'AGENTS.md'
+      - '**/*.md'
 
 permissions:
   contents: write
@@ -13,7 +18,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - name: Bump version and push tag
-        uses: mathieudutour/github-tag-action@v6
+        uses: mathieudutour/github-tag-action@v6.2
         with:
           github_token: ${{ secrets.GITHUB_TOKEN }}
           default_bump: patch
