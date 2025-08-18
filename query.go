@@ -9,13 +9,17 @@ import (
 	"github.com/kisielk/sqlstruct"
 )
 
+func Query[T any](ctx context.Context, db *sql.DB, clause SqlClause) ([]T, error) {
+	return QueryContext[T](context.Background(), db, clause)
+}
+
 // Query executes the SELECT SqlClause against the provided database and scans
 // the resulting rows into a slice of T.
 //
 // The SqlClause must be built using Select[T] so that ModelType and ColumnNames
 // match the fields in T. Query returns an error if the clause is not a SELECT
 // clause.
-func Query[T any](ctx context.Context, db *sql.DB, clause SqlClause) ([]T, error) {
+func QueryContext[T any](ctx context.Context, db *sql.DB, clause SqlClause) ([]T, error) {
 	if clause.Type != ClauseSelect {
 		return nil, fmt.Errorf("sqlcompose: Query requires a SELECT clause")
 	}

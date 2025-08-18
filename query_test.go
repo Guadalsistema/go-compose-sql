@@ -30,7 +30,7 @@ func TestQuery(t *testing.T) {
 
 	mock.ExpectQuery(clause.Write()).WillReturnRows(rows)
 
-	got, err := Query[User](context.Background(), db, clause)
+	got, err := QueryContext[User](context.Background(), db, clause)
 	if err != nil {
 		t.Fatalf("Query returned error: %v", err)
 	}
@@ -62,7 +62,7 @@ func TestQueryWhereArgs(t *testing.T) {
 	rows := sqlmock.NewRows([]string{"id", "first_name"}).AddRow(1, "Alice")
 	mock.ExpectQuery(regexp.QuoteMeta(clause.Write())).WithArgs(1).WillReturnRows(rows)
 
-	got, err := Query[User](context.Background(), db, clause)
+	got, err := QueryContext[User](context.Background(), db, clause)
 	if err != nil {
 		t.Fatalf("Query returned error: %v", err)
 	}
@@ -96,7 +96,7 @@ func TestQueryPointer(t *testing.T) {
 
 	mock.ExpectQuery(clause.Write()).WillReturnRows(rows)
 
-	got, err := Query[*User](context.Background(), db, clause)
+	got, err := QueryContext[*User](context.Background(), db, clause)
 	if err != nil {
 		t.Fatalf("Query returned error: %v", err)
 	}
@@ -120,7 +120,7 @@ func TestQueryNonSelect(t *testing.T) {
 	}
 	defer db.Close()
 
-	if _, err := Query[User](context.Background(), db, clause); err == nil {
+	if _, err := QueryContext[User](context.Background(), db, clause); err == nil {
 		t.Fatalf("expected error for non-select clause")
 	}
 }
