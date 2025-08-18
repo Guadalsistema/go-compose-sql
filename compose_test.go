@@ -49,6 +49,20 @@ func TestSelect(t *testing.T) {
 	}
 }
 
+func TestSelectWithFieldsOpt(t *testing.T) {
+	type User struct {
+		ID        int `db:"id"`
+		FirstName string
+		LastName  string `db:"last_name"`
+	}
+
+	stmt := Select[User](&SqlOpts{Fields: []string{"id", "last_name"}})
+	expected := "SELECT id, last_name FROM user;"
+	if got := stmt.Write(); got != expected {
+		t.Fatalf("unexpected SQL with fields opt: %s", got)
+	}
+}
+
 func TestSelectWhere(t *testing.T) {
 	type User struct {
 		ID        int    `db:"id"`
