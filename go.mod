@@ -1,4 +1,4 @@
-module github.com/example/go-compose-sql
+module github.com/Guadalsistema/go-compose-sql
 
 go 1.24
 
