@@ -5,6 +5,8 @@ import (
 	"database/sql"
 	"fmt"
 	"reflect"
+
+	"github.com/kisielk/sqlstruct"
 )
 
 // Exec executes the INSERT SqlClause against the provided database using
@@ -37,7 +39,7 @@ func ExecContext(ctx context.Context, db *sql.DB, clause SqlClause, model any) (
 	var args []any
 	for i := 0; i < clause.ModelType.NumField(); i++ {
 		f := clause.ModelType.Field(i)
-		if f.PkgPath != "" || f.Tag.Get("db") == "-" {
+		if f.PkgPath != "" || f.Tag.Get(sqlstruct.TagName) == "-" {
 			continue
 		}
 		args = append(args, val.Field(i).Interface())

@@ -65,7 +65,7 @@ func Insert[T any](opts *SqlOpts) SqlClause {
 		if f.PkgPath != "" {
 			continue
 		}
-		tag := f.Tag.Get("db")
+		tag := f.Tag.Get(sqlstruct.TagName)
 		if tag == "-" {
 			continue
 		}
@@ -101,7 +101,7 @@ func Select[T any](opts *SqlOpts) SqlClause {
 		if f.PkgPath != "" {
 			continue
 		}
-		tag := f.Tag.Get("db")
+		tag := f.Tag.Get(sqlstruct.TagName)
 		if tag == "-" {
 			continue
 		}
