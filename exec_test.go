@@ -2,6 +2,7 @@ package sqlcompose
 
 import (
 	"context"
+	"errors"
 	"regexp"
 	"testing"
 
@@ -25,7 +26,12 @@ func TestExec(t *testing.T) {
 
 	u := User{1, "Alice", "Smith"}
 
-	mock.ExpectExec(regexp.QuoteMeta(stmt.Write())).
+	sqlStr, err := stmt.Write()
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	mock.ExpectExec(regexp.QuoteMeta(sqlStr)).
 		WithArgs(u.ID, u.FirstName, u.LastName).
 		WillReturnResult(sqlmock.NewResult(1, 1))
 
@@ -54,7 +60,12 @@ func TestExecPointer(t *testing.T) {
 
 	u := &User{ID: 5, Name: "Bob"}
 
-	mock.ExpectExec(regexp.QuoteMeta(stmt.Write())).
+	sqlStr, err := stmt.Write()
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	mock.ExpectExec(regexp.QuoteMeta(sqlStr)).
 		WithArgs(u.ID, u.Name).
 		WillReturnResult(sqlmock.NewResult(1, 1))
 
@@ -84,11 +95,16 @@ func TestExecMultiple(t *testing.T) {
 	u1 := User{ID: 1, Name: "Alice"}
 	u2 := User{ID: 2, Name: "Bob"}
 
-	mock.ExpectExec(regexp.QuoteMeta(stmt.Write())).
+	sqlStr, err := stmt.Write()
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	mock.ExpectExec(regexp.QuoteMeta(sqlStr)).
 		WithArgs(u1.ID, u1.Name).
 		WillReturnResult(sqlmock.NewResult(1, 1))
 
-	mock.ExpectExec(regexp.QuoteMeta(stmt.Write())).
+	mock.ExpectExec(regexp.QuoteMeta(sqlStr)).
 		WithArgs(u2.ID, u2.Name).
 		WillReturnResult(sqlmock.NewResult(2, 1))
 
@@ -116,7 +132,12 @@ func TestExecContext(t *testing.T) {
 
 	u := User{ID: 10}
 
-	mock.ExpectExec(regexp.QuoteMeta(stmt.Write())).
+	sqlStr, err := stmt.Write()
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	mock.ExpectExec(regexp.QuoteMeta(sqlStr)).
 		WithArgs(u.ID).
 		WillReturnResult(sqlmock.NewResult(1, 1))
 
@@ -141,5 +162,53 @@ func TestExecNonInsert(t *testing.T) {
 
 	if _, err := Exec(db, stmt, User{ID: 1}); err == nil {
 		t.Fatalf("expected error for non-insert clause")
+	}
+}
+
+func TestExecInvalidClause(t *testing.T) {
+	type User struct {
+		ID int `sql:"id"`
+	}
+	stmt := Insert[User](nil)
+	stmt.Clauses = append(stmt.Clauses, SqlClause{Type: ClauseType("BAD")})
+
+	db, _, err := sqlmock.New()
+	if err != nil {
+		t.Fatalf("sqlmock.New: %v", err)
+	}
+	defer db.Close()
+
+	if _, err := Exec(db, stmt, User{ID: 1}); err == nil {
+		t.Fatalf("expected error for invalid clause")
+	} else {
+		var clauseErr *ErrInvalidClause
+		if !errors.As(err, &clauseErr) {
+			t.Fatalf("expected ErrInvalidClause, got %v", err)
+		}
+	}
+}
+
+func TestExecMisplacedClause(t *testing.T) {
+	type User struct {
+		ID int `sql:"id"`
+	}
+	stmt := Insert[User](nil).Desc()
+
+	db, _, err := sqlmock.New()
+	if err != nil {
+		t.Fatalf("sqlmock.New: %v", err)
+	}
+	defer db.Close()
+
+	if _, err := Exec(db, stmt, User{ID: 1}); err == nil {
+		t.Fatalf("expected error for misplaced clause")
+	} else {
+		var clauseErr *ErrMisplacedClause
+		if !errors.As(err, &clauseErr) {
+			t.Fatalf("expected ErrMisplacedClause, got %v", err)
+		}
+		if clauseErr.Clause != string(ClauseDesc) {
+			t.Fatalf("unexpected clause: %s", clauseErr.Clause)
+		}
 	}
 }

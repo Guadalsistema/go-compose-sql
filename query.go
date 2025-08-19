@@ -58,7 +58,12 @@ func QueryContext[T any](ctx context.Context, db *sql.DB, stmt SQLStatement) (*Q
 
 	first := stmt.Clauses[0]
 
-	rows, err := db.QueryContext(ctx, stmt.Write(), stmt.Args()...)
+	sqlStmt, err := stmt.Write()
+	if err != nil {
+		return nil, err
+	}
+
+	rows, err := db.QueryContext(ctx, sqlStmt, stmt.Args()...)
 	if err != nil {
 		return nil, err
 	}
