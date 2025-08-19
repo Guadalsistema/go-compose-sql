@@ -3,6 +3,7 @@ package sqlcompose
 import (
 	"context"
 	"database/sql"
+	"errors"
 	"reflect"
 	"testing"
 
@@ -28,7 +29,12 @@ func TestQuery(t *testing.T) {
 		AddRow(1, "Alice", "Smith").
 		AddRow(2, "Bob", "Jones")
 
-	mock.ExpectQuery(stmt.Write()).WillReturnRows(rows)
+	sqlStr, err := stmt.Write()
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	mock.ExpectQuery(sqlStr).WillReturnRows(rows)
 
 	got, err := QueryContext[User](context.Background(), db, stmt)
 	if err != nil {
@@ -71,7 +77,12 @@ func TestQueryWhereArgs(t *testing.T) {
 		AddRow(1, "Alice").
 		AddRow(2, "Bob")
 
-	mock.ExpectQuery(stmt.Write()).WillReturnRows(rows)
+	sqlStr, err := stmt.Write()
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	mock.ExpectQuery(sqlStr).WillReturnRows(rows)
 
 	got, err := QueryContext[User](context.Background(), db, stmt)
 	if err != nil {
@@ -118,7 +129,12 @@ func TestQueryPointer(t *testing.T) {
 		AddRow(1, "Alice").
 		AddRow(2, "Bob")
 
-	mock.ExpectQuery(stmt.Write()).WillReturnRows(rows)
+	sqlStr, err := stmt.Write()
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	mock.ExpectQuery(sqlStr).WillReturnRows(rows)
 
 	got, err := QueryContext[User](context.Background(), db, stmt)
 	if err != nil {
@@ -177,7 +193,11 @@ func TestQueryOne(t *testing.T) {
 	defer db.Close()
 
 	rows := sqlmock.NewRows([]string{"id", "first_name"}).AddRow(1, "Alice")
-	mock.ExpectQuery(stmt.Write()).WillReturnRows(rows)
+	sqlStr, err := stmt.Write()
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	mock.ExpectQuery(sqlStr).WillReturnRows(rows)
 
 	got, err := QueryOneContext[User](context.Background(), db, stmt)
 	if err != nil {
@@ -208,7 +228,11 @@ func TestQueryOneNoRows(t *testing.T) {
 	defer db.Close()
 
 	rows := sqlmock.NewRows([]string{"id"})
-	mock.ExpectQuery(stmt.Write()).WillReturnRows(rows)
+	sqlStr, err := stmt.Write()
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	mock.ExpectQuery(sqlStr).WillReturnRows(rows)
 
 	if _, err := QueryOneContext[User](context.Background(), db, stmt); err != sql.ErrNoRows {
 		t.Fatalf("expected sql.ErrNoRows, got %v", err)
@@ -233,7 +257,11 @@ func TestQueryOneMultipleRows(t *testing.T) {
 	defer db.Close()
 
 	rows := sqlmock.NewRows([]string{"id"}).AddRow(1).AddRow(2)
-	mock.ExpectQuery(stmt.Write()).WillReturnRows(rows)
+	sqlStr, err := stmt.Write()
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	mock.ExpectQuery(sqlStr).WillReturnRows(rows)
 
 	if _, err := QueryOneContext[User](context.Background(), db, stmt); err == nil {
 		t.Fatalf("expected error for multiple rows")
@@ -241,5 +269,53 @@ func TestQueryOneMultipleRows(t *testing.T) {
 
 	if err := mock.ExpectationsWereMet(); err != nil {
 		t.Fatalf("unmet expectations: %v", err)
+	}
+}
+
+func TestQueryInvalidClause(t *testing.T) {
+	type User struct {
+		ID int `sql:"id"`
+	}
+	stmt := Select[User](nil)
+	stmt.Clauses = append(stmt.Clauses, SqlClause{Type: ClauseType("BAD")})
+
+	db, _, err := sqlmock.New()
+	if err != nil {
+		t.Fatalf("sqlmock.New: %v", err)
+	}
+	defer db.Close()
+
+	if _, err := QueryContext[User](context.Background(), db, stmt); err == nil {
+		t.Fatalf("expected error for invalid clause")
+	} else {
+		var clauseErr *ErrInvalidClause
+		if !errors.As(err, &clauseErr) {
+			t.Fatalf("expected ErrInvalidClause, got %v", err)
+		}
+	}
+}
+
+func TestQueryMisplacedClause(t *testing.T) {
+	type User struct {
+		ID int `sql:"id"`
+	}
+	stmt := Select[User](nil).Desc()
+
+	db, _, err := sqlmock.New()
+	if err != nil {
+		t.Fatalf("sqlmock.New: %v", err)
+	}
+	defer db.Close()
+
+	if _, err := QueryContext[User](context.Background(), db, stmt); err == nil {
+		t.Fatalf("expected error for misplaced clause")
+	} else {
+		var clauseErr *ErrMisplacedClause
+		if !errors.As(err, &clauseErr) {
+			t.Fatalf("expected ErrMisplacedClause, got %v", err)
+		}
+		if clauseErr.Clause != string(ClauseDesc) {
+			t.Fatalf("unexpected clause: %s", clauseErr.Clause)
+		}
 	}
 }

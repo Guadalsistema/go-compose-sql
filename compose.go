@@ -19,15 +19,22 @@ type SQLStatement struct {
 }
 
 // Write renders the complete SQL statement by concatenating all clauses.
-func (s SQLStatement) Write() string {
+func (s SQLStatement) Write() (string, error) {
 	var parts []string
-	for _, c := range s.Clauses {
-		parts = append(parts, c.Write())
+	for i, c := range s.Clauses {
+		if (c.Type == ClauseDesc || c.Type == ClauseAsc) && (i == 0 || s.Clauses[i-1].Type != ClauseOrderBy) {
+			return "", NewErrMisplacedClause(string(c.Type))
+		}
+		p, err := c.Write()
+		if err != nil {
+			return "", err
+		}
+		parts = append(parts, p)
 	}
 	if len(parts) == 0 {
-		return ""
+		return "", nil
 	}
-	return strings.Join(parts, " ") + ";"
+	return strings.Join(parts, " ") + ";", nil
 }
 
 // Args returns the collected arguments from all clauses in the statement.
@@ -59,18 +66,12 @@ func (s SQLStatement) Limit(n int) SQLStatement {
 
 // Desc appends a DESC clause ensuring it follows an ORDER BY clause.
 func (s SQLStatement) Desc() SQLStatement {
-	if len(s.Clauses) == 0 || s.Clauses[len(s.Clauses)-1].Type != ClauseOrderBy {
-		panic("DESC must follow ORDER BY clause")
-	}
 	s.Clauses = append(s.Clauses, SqlClause{Type: ClauseDesc})
 	return s
 }
 
 // Asc appends an ASC clause ensuring it follows an ORDER BY clause.
 func (s SQLStatement) Asc() SQLStatement {
-	if len(s.Clauses) == 0 || s.Clauses[len(s.Clauses)-1].Type != ClauseOrderBy {
-		panic("ASC must follow ORDER BY clause")
-	}
 	s.Clauses = append(s.Clauses, SqlClause{Type: ClauseAsc})
 	return s
 }

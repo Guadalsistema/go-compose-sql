@@ -34,6 +34,11 @@ func ExecContext(ctx context.Context, db *sql.DB, stmt SQLStatement, models ...a
 
 	first := stmt.Clauses[0]
 
+	sqlStmt, err := stmt.Write()
+	if err != nil {
+		return nil, err
+	}
+
 	var res sql.Result
 	for _, model := range models {
 		val := reflect.ValueOf(model)
@@ -54,7 +59,7 @@ func ExecContext(ctx context.Context, db *sql.DB, stmt SQLStatement, models ...a
 			args = append(args, val.Field(i).Interface())
 		}
 
-		r, err := db.ExecContext(ctx, stmt.Write(), args...)
+		r, err := db.ExecContext(ctx, sqlStmt, args...)
 		if err != nil {
 			return r, err
 		}

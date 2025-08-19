@@ -1,6 +1,7 @@
 package sqlcompose
 
 import (
+	"errors"
 	"reflect"
 	"testing"
 
@@ -16,7 +17,11 @@ func TestInsert(t *testing.T) {
 
 	stmt := Insert[User](nil)
 	expected := "INSERT INTO user (id, first_name, last_name) VALUES (?, ?, ?);"
-	if got := stmt.Write(); got != expected {
+	got, err := stmt.Write()
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if got != expected {
 		t.Fatalf("unexpected SQL: %s", got)
 	}
 	if stmt.Clauses[0].ModelType != reflect.TypeOf(User{}) {
@@ -31,7 +36,11 @@ func TestInsertWithTableOpt(t *testing.T) {
 
 	stmt := Insert[Widget](&SqlOpts{TableName: "widgets"})
 	expected := "INSERT INTO widgets (name) VALUES (?);"
-	if got := stmt.Write(); got != expected {
+	got, err := stmt.Write()
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if got != expected {
 		t.Fatalf("unexpected SQL with table opt: %s", got)
 	}
 }
@@ -44,7 +53,11 @@ func TestSelect(t *testing.T) {
 
 	stmt := Select[User](nil)
 	expected := "SELECT id, first_name FROM user;"
-	if got := stmt.Write(); got != expected {
+	got, err := stmt.Write()
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if got != expected {
 		t.Fatalf("unexpected SQL: %s", got)
 	}
 }
@@ -58,7 +71,11 @@ func TestSelectWithFieldsOpt(t *testing.T) {
 
 	stmt := Select[User](&SqlOpts{Fields: []string{"id", "last_name"}})
 	expected := "SELECT id, last_name FROM user;"
-	if got := stmt.Write(); got != expected {
+	got, err := stmt.Write()
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if got != expected {
 		t.Fatalf("unexpected SQL with fields opt: %s", got)
 	}
 }
@@ -71,7 +88,11 @@ func TestSelectWhere(t *testing.T) {
 
 	stmt := Select[User](nil).Where("id=?", 1)
 	expected := "SELECT id, first_name FROM user WHERE id=?;"
-	if got := stmt.Write(); got != expected {
+	got, err := stmt.Write()
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if got != expected {
 		t.Fatalf("unexpected SQL: %s", got)
 	}
 }
@@ -84,7 +105,11 @@ func TestSelectOrderByDesc(t *testing.T) {
 
 	stmt := Select[User](nil).OrderBy("id").Desc()
 	expected := "SELECT id, first_name FROM user ORDER BY id DESC;"
-	if got := stmt.Write(); got != expected {
+	got, err := stmt.Write()
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if got != expected {
 		t.Fatalf("unexpected SQL: %s", got)
 	}
 }
@@ -97,29 +122,39 @@ func TestSelectOrderByAsc(t *testing.T) {
 
 	stmt := Select[User](nil).OrderBy("id").Asc()
 	expected := "SELECT id, first_name FROM user ORDER BY id ASC;"
-	if got := stmt.Write(); got != expected {
+	got, err := stmt.Write()
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if got != expected {
 		t.Fatalf("unexpected SQL: %s", got)
 	}
 }
 
 func TestDescRequiresOrderBy(t *testing.T) {
-	defer func() {
-		if recover() == nil {
-			t.Fatal("expected panic when DESC used without ORDER BY")
-		}
-	}()
 	type User struct{ ID int }
-	Select[User](nil).Desc()
+	stmt := Select[User](nil).Desc()
+	_, err := stmt.Write()
+	var clauseErr *ErrMisplacedClause
+	if !errors.As(err, &clauseErr) {
+		t.Fatalf("expected ErrMisplacedClause, got %v", err)
+	}
+	if clauseErr.Clause != string(ClauseDesc) {
+		t.Fatalf("unexpected clause: %s", clauseErr.Clause)
+	}
 }
 
 func TestAscRequiresOrderBy(t *testing.T) {
-	defer func() {
-		if recover() == nil {
-			t.Fatal("expected panic when ASC used without ORDER BY")
-		}
-	}()
 	type User struct{ ID int }
-	Select[User](nil).Asc()
+	stmt := Select[User](nil).Asc()
+	_, err := stmt.Write()
+	var clauseErr *ErrMisplacedClause
+	if !errors.As(err, &clauseErr) {
+		t.Fatalf("expected ErrMisplacedClause, got %v", err)
+	}
+	if clauseErr.Clause != string(ClauseAsc) {
+		t.Fatalf("unexpected clause: %s", clauseErr.Clause)
+	}
 }
 
 func TestSelectLimit(t *testing.T) {
@@ -130,7 +165,11 @@ func TestSelectLimit(t *testing.T) {
 
 	stmt := Select[User](nil).Limit(5)
 	expected := "SELECT id, first_name FROM user LIMIT ?;"
-	if got := stmt.Write(); got != expected {
+	got, err := stmt.Write()
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if got != expected {
 		t.Fatalf("unexpected SQL: %s", got)
 	}
 	args := stmt.Args()
@@ -144,7 +183,11 @@ func TestDelete(t *testing.T) {
 
 	stmt := Delete[User](nil)
 	expected := "DELETE FROM user;"
-	if got := stmt.Write(); got != expected {
+	got, err := stmt.Write()
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if got != expected {
 		t.Fatalf("unexpected SQL: %s", got)
 	}
 }
@@ -159,5 +202,17 @@ func TestSnakeCase(t *testing.T) {
 		if got := sqlstruct.ToSnakeCase(in); got != want {
 			t.Fatalf("ToSnakeCase(%q)=%q; want %q", in, got, want)
 		}
+	}
+}
+
+func TestInvalidClause(t *testing.T) {
+	stmt := SQLStatement{Clauses: []SqlClause{{Type: ClauseType("BAD")}}}
+	_, err := stmt.Write()
+	var clauseErr *ErrInvalidClause
+	if !errors.As(err, &clauseErr) {
+		t.Fatalf("expected ErrInvalidClause, got %v", err)
+	}
+	if clauseErr.Clause != "BAD" {
+		t.Fatalf("unexpected clause name: %s", clauseErr.Clause)
 	}
 }

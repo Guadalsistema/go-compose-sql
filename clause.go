@@ -35,29 +35,29 @@ type SqlClause struct {
 }
 
 // Write renders an individual SQL clause to a string.
-func (c SqlClause) Write() string {
+func (c SqlClause) Write() (string, error) {
 	switch c.Type {
 	case ClauseInsert:
 		cols := strings.Join(c.ColumnNames, ", ")
 		placeholders := strings.TrimRight(strings.Repeat("?, ", len(c.ColumnNames)), ", ")
-		return fmt.Sprintf("INSERT INTO %s (%s) VALUES (%s)", c.TableName, cols, placeholders)
+		return fmt.Sprintf("INSERT INTO %s (%s) VALUES (%s)", c.TableName, cols, placeholders), nil
 	case ClauseSelect:
 		cols := strings.Join(c.ColumnNames, ", ")
-		return fmt.Sprintf("SELECT %s FROM %s", cols, c.TableName)
+		return fmt.Sprintf("SELECT %s FROM %s", cols, c.TableName), nil
 	case ClauseDelete:
-		return fmt.Sprintf("DELETE FROM %s", c.TableName)
+		return fmt.Sprintf("DELETE FROM %s", c.TableName), nil
 	case ClauseWhere:
-		return fmt.Sprintf("WHERE %s", c.Expr)
+		return fmt.Sprintf("WHERE %s", c.Expr), nil
 	case ClauseOrderBy:
 		cols := strings.Join(c.ColumnNames, ", ")
-		return fmt.Sprintf("ORDER BY %s", cols)
+		return fmt.Sprintf("ORDER BY %s", cols), nil
 	case ClauseLimit:
-		return "LIMIT ?"
+		return "LIMIT ?", nil
 	case ClauseDesc:
-		return "DESC"
+		return "DESC", nil
 	case ClauseAsc:
-		return "ASC"
+		return "ASC", nil
 	default:
-		return ""
+		return "", NewErrInvalidClause(string(c.Type))
 	}
 }
