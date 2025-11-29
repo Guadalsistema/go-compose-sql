@@ -1,6 +1,7 @@
 package sqlcompose
 
 import (
+	"fmt"
 	"reflect"
 	"strings"
 
@@ -26,13 +27,21 @@ func (s SQLStatement) Write() (string, error) {
 		if (c.Type == ClauseDesc || c.Type == ClauseAsc) && (i == 0 || s.Clauses[i-1].Type != ClauseOrderBy) {
 			return "", NewErrMisplacedClause(string(c.Type))
 		}
-		// OFFSET must be the last clause
-		if c.Type == ClauseOffset && i != len(s.Clauses)-1 {
-			return "", NewErrMisplacedClause(string(c.Type))
-		}
 		p, err := c.Write()
 		if err != nil {
 			return "", err
+		}
+		if c.Type == ClauseCoalesce {
+			if i == 0 || s.Clauses[i-1].Type != ClauseSelect {
+				return "", NewErrMisplacedClause(string(c.Type))
+			}
+			sel := parts[len(parts)-1]
+			idx := strings.Index(sel, " FROM ")
+			if idx == -1 {
+				return "", fmt.Errorf("sqlcompose: malformed SELECT clause")
+			}
+			parts[len(parts)-1] = sel[:idx] + ", " + p + sel[idx:]
+			continue
 		}
 		parts = append(parts, p)
 	}
@@ -72,6 +81,16 @@ func (s SQLStatement) Limit(n int) SQLStatement {
 // Offset appends an OFFSET clause to the statement.
 func (s SQLStatement) Offset(n int) SQLStatement {
 	s.Clauses = append(s.Clauses, SqlClause{Type: ClauseOffset, Args: []any{n}})
+	return s
+}
+
+// Coalesce appends a COALESCE expression to the SELECT list.
+func (s SQLStatement) Coalesce(values ...any) SQLStatement {
+	formatted := make([]string, 0, len(values))
+	for _, v := range values {
+		formatted = append(formatted, formatCoalesceValue(v))
+	}
+	s.Clauses = append(s.Clauses, SqlClause{Type: ClauseCoalesce, ColumnNames: formatted})
 	return s
 }
 

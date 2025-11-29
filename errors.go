@@ -16,6 +16,20 @@ func NewErrInvalidClause(clause string) error {
 	return &ErrInvalidClause{Clause: clause}
 }
 
+// ErrInvalidCoalesceArgs is returned when COALESCE is called with insufficient arguments.
+type ErrInvalidCoalesceArgs struct {
+	Count int
+}
+
+func (e *ErrInvalidCoalesceArgs) Error() string {
+	return "sqlcompose: COALESCE requires at least two arguments"
+}
+
+// NewErrInvalidCoalesceArgs constructs a new ErrInvalidCoalesceArgs with the provided argument count.
+func NewErrInvalidCoalesceArgs(count int) error {
+	return &ErrInvalidCoalesceArgs{Count: count}
+}
+
 // ErrMisplacedClause is returned when a clause is used in an invalid position.
 type ErrMisplacedClause struct {
 	Clause string

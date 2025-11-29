@@ -199,6 +199,61 @@ func TestSelectOffset(t *testing.T) {
 	}
 }
 
+func TestSelectCoalesce(t *testing.T) {
+	type User struct {
+		ID        int    `db:"id"`
+		FirstName string `db:"first_name"`
+	}
+
+	stmt := Select[User](nil).Coalesce("first_name", "'unknown'")
+	expected := "SELECT id, first_name, COALESCE(first_name, 'unknown') FROM user;"
+	got, err := stmt.Write()
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if got != expected {
+		t.Fatalf("unexpected SQL: %s", got)
+	}
+}
+
+func TestCoalesceRequiresSelect(t *testing.T) {
+	stmt := Insert[struct{}](nil).Coalesce("a", "b")
+	_, err := stmt.Write()
+	var clauseErr *ErrMisplacedClause
+	if !errors.As(err, &clauseErr) {
+		t.Fatalf("expected ErrMisplacedClause, got %v", err)
+	}
+	if clauseErr.Clause != string(ClauseCoalesce) {
+		t.Fatalf("unexpected clause: %s", clauseErr.Clause)
+	}
+}
+
+func TestCoalesceRequiresTwoValues(t *testing.T) {
+	stmt := Select[struct{}](nil).Coalesce("only_one")
+	_, err := stmt.Write()
+	var coErr *ErrInvalidCoalesceArgs
+	if !errors.As(err, &coErr) {
+		t.Fatalf("expected ErrInvalidCoalesceArgs, got %v", err)
+	}
+}
+
+func TestCoalesceFormatsAnyValues(t *testing.T) {
+	type User struct {
+		ID        int    `db:"id"`
+		FirstName string `db:"first_name"`
+	}
+
+	stmt := Select[User](nil).Coalesce("first_name", nil, 0)
+	expected := "SELECT id, first_name, COALESCE(first_name, NULL, 0) FROM user;"
+	got, err := stmt.Write()
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if got != expected {
+		t.Fatalf("unexpected SQL: %s", got)
+	}
+}
+
 func TestDelete(t *testing.T) {
 	type User struct{}
 

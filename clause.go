@@ -10,16 +10,17 @@ import (
 type ClauseType string
 
 const (
-	ClauseInsert  ClauseType = "INSERT"
-	ClauseSelect  ClauseType = "SELECT"
-	ClauseUpdate  ClauseType = "UPDATE"
-	ClauseDelete  ClauseType = "DELETE"
-	ClauseWhere   ClauseType = "WHERE"
-	ClauseOrderBy ClauseType = "ORDER BY"
-	ClauseLimit   ClauseType = "LIMIT"
-	ClauseOffset  ClauseType = "OFFSET"
-	ClauseDesc    ClauseType = "DESC"
-	ClauseAsc     ClauseType = "ASC"
+	ClauseInsert   ClauseType = "INSERT"
+	ClauseSelect   ClauseType = "SELECT"
+	ClauseUpdate   ClauseType = "UPDATE"
+	ClauseDelete   ClauseType = "DELETE"
+	ClauseWhere    ClauseType = "WHERE"
+	ClauseOrderBy  ClauseType = "ORDER BY"
+	ClauseLimit    ClauseType = "LIMIT"
+	ClauseOffset   ClauseType = "OFFSET"
+	ClauseCoalesce ClauseType = "COALESCE"
+	ClauseDesc     ClauseType = "DESC"
+	ClauseAsc      ClauseType = "ASC"
 )
 
 // SqlClause represents a SQL statement before rendering.
@@ -56,11 +57,29 @@ func (c SqlClause) Write() (string, error) {
 		return "LIMIT ?", nil
 	case ClauseOffset:
 		return "OFFSET ?", nil
+	case ClauseCoalesce:
+		if len(c.ColumnNames) < 2 {
+			return "", NewErrInvalidCoalesceArgs(len(c.ColumnNames))
+		}
+		return fmt.Sprintf("COALESCE(%s)", strings.Join(c.ColumnNames, ", ")), nil
 	case ClauseDesc:
 		return "DESC", nil
 	case ClauseAsc:
 		return "ASC", nil
 	default:
 		return "", NewErrInvalidClause(string(c.Type))
+	}
+}
+
+func formatCoalesceValue(v any) string {
+	switch val := v.(type) {
+	case nil:
+		return "NULL"
+	case fmt.Stringer:
+		return val.String()
+	case string:
+		return val
+	default:
+		return fmt.Sprint(val)
 	}
 }
