@@ -22,7 +22,12 @@ type SQLStatement struct {
 func (s SQLStatement) Write() (string, error) {
 	var parts []string
 	for i, c := range s.Clauses {
+		// DESC/ASC must follow ORDER BY
 		if (c.Type == ClauseDesc || c.Type == ClauseAsc) && (i == 0 || s.Clauses[i-1].Type != ClauseOrderBy) {
+			return "", NewErrMisplacedClause(string(c.Type))
+		}
+		// OFFSET must be the last clause
+		if c.Type == ClauseOffset && i != len(s.Clauses)-1 {
 			return "", NewErrMisplacedClause(string(c.Type))
 		}
 		p, err := c.Write()
