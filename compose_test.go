@@ -178,6 +178,27 @@ func TestSelectLimit(t *testing.T) {
 	}
 }
 
+func TestSelectOffset(t *testing.T) {
+	type User struct {
+		ID        int    `db:"id"`
+		FirstName string `db:"first_name"`
+	}
+
+	stmt := Select[User](nil).Limit(5).Offset(10)
+	expected := "SELECT id, first_name FROM user LIMIT ? OFFSET ?;"
+	got, err := stmt.Write()
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if got != expected {
+		t.Fatalf("unexpected SQL: %s", got)
+	}
+	args := stmt.Args()
+	if len(args) != 2 || args[0] != 5 || args[1] != 10 {
+		t.Fatalf("unexpected args: %v", args)
+	}
+}
+
 func TestDelete(t *testing.T) {
 	type User struct{}
 

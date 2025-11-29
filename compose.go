@@ -64,6 +64,12 @@ func (s SQLStatement) Limit(n int) SQLStatement {
 	return s
 }
 
+// Offset appends an OFFSET clause to the statement.
+func (s SQLStatement) Offset(n int) SQLStatement {
+	s.Clauses = append(s.Clauses, SqlClause{Type: ClauseOffset, Args: []any{n}})
+	return s
+}
+
 // Desc appends a DESC clause ensuring it follows an ORDER BY clause.
 func (s SQLStatement) Desc() SQLStatement {
 	s.Clauses = append(s.Clauses, SqlClause{Type: ClauseDesc})

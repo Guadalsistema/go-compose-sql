@@ -17,6 +17,7 @@ const (
 	ClauseWhere   ClauseType = "WHERE"
 	ClauseOrderBy ClauseType = "ORDER BY"
 	ClauseLimit   ClauseType = "LIMIT"
+	ClauseOffset  ClauseType = "OFFSET"
 	ClauseDesc    ClauseType = "DESC"
 	ClauseAsc     ClauseType = "ASC"
 )
@@ -53,6 +54,8 @@ func (c SqlClause) Write() (string, error) {
 		return fmt.Sprintf("ORDER BY %s", cols), nil
 	case ClauseLimit:
 		return "LIMIT ?", nil
+	case ClauseOffset:
+		return "OFFSET ?", nil
 	case ClauseDesc:
 		return "DESC", nil
 	case ClauseAsc:
