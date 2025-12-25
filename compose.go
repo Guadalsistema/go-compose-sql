@@ -27,6 +27,13 @@ func (s SQLStatement) Write() (string, error) {
 		if (c.Type == ClauseDesc || c.Type == ClauseAsc) && (i == 0 || s.Clauses[i-1].Type != ClauseOrderBy) {
 			return "", NewErrMisplacedClause(string(c.Type))
 		}
+		if c.Type == ClauseReturning {
+			switch s.Clauses[0].Type {
+			case ClauseInsert, ClauseUpdate, ClauseDelete:
+			default:
+				return "", NewErrMisplacedClause(string(c.Type))
+			}
+		}
 		p, err := c.Write()
 		if err != nil {
 			return "", err
@@ -97,6 +104,12 @@ func (s SQLStatement) Coalesce(values ...any) SQLStatement {
 // Desc appends a DESC clause ensuring it follows an ORDER BY clause.
 func (s SQLStatement) Desc() SQLStatement {
 	s.Clauses = append(s.Clauses, SqlClause{Type: ClauseDesc})
+	return s
+}
+
+// Returning appends a RETURNING clause to INSERT, UPDATE, or DELETE statements.
+func (s SQLStatement) Returning(columns ...string) SQLStatement {
+	s.Clauses = append(s.Clauses, SqlClause{Type: ClauseReturning, ColumnNames: columns})
 	return s
 }
 

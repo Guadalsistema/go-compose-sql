@@ -52,11 +52,21 @@ func (iter *QueryRowIterator[T]) Close() error {
 // QueryContext executes the SELECT SQLStatement against the provided database
 // and returns a QueryRowIterator so the caller can iterate over the results.
 func QueryContext[T any](ctx context.Context, db *sql.DB, stmt SQLStatement) (*QueryRowIterator[T], error) {
-	if len(stmt.Clauses) == 0 || stmt.Clauses[0].Type != ClauseSelect {
-		return nil, fmt.Errorf("sqlcompose: Query requires a SELECT clause")
+	errNeedsRowSet := fmt.Errorf("sqlcompose: Query requires a SELECT clause or a RETURNING clause")
+	if len(stmt.Clauses) == 0 {
+		return nil, errNeedsRowSet
 	}
 
 	first := stmt.Clauses[0]
+	switch first.Type {
+	case ClauseSelect:
+	case ClauseInsert, ClauseUpdate, ClauseDelete:
+		if !hasReturningClause(stmt) {
+			return nil, errNeedsRowSet
+		}
+	default:
+		return nil, errNeedsRowSet
+	}
 
 	sqlStmt, err := stmt.Write()
 	if err != nil {
@@ -115,4 +125,13 @@ func QueryOneContext[T any](ctx context.Context, db *sql.DB, stmt SQLStatement) 
 	}
 
 	return result, nil
+}
+
+func hasReturningClause(stmt SQLStatement) bool {
+	for _, clause := range stmt.Clauses {
+		if clause.Type == ClauseReturning {
+			return true
+		}
+	}
+	return false
 }

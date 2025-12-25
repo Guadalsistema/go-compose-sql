@@ -150,6 +150,40 @@ func TestExecContext(t *testing.T) {
 	}
 }
 
+func TestExecReturning(t *testing.T) {
+	type User struct {
+		ID   int    `db:"id"`
+		Name string `db:"name"`
+	}
+
+	stmt := Insert[User](nil).Returning("id")
+
+	db, mock, err := sqlmock.New()
+	if err != nil {
+		t.Fatalf("sqlmock.New: %v", err)
+	}
+	defer db.Close()
+
+	u := User{ID: 3, Name: "Alice"}
+
+	sqlStr, err := stmt.Write()
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	mock.ExpectExec(regexp.QuoteMeta(sqlStr)).
+		WithArgs(u.ID, u.Name).
+		WillReturnResult(sqlmock.NewResult(3, 1))
+
+	if _, err := Exec(db, stmt, u); err != nil {
+		t.Fatalf("Exec returned error: %v", err)
+	}
+
+	if err := mock.ExpectationsWereMet(); err != nil {
+		t.Fatalf("unmet expectations: %v", err)
+	}
+}
+
 func TestExecNonInsert(t *testing.T) {
 	type User struct{ ID int }
 	stmt := Select[User](nil)

@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"errors"
 	"reflect"
+	"regexp"
 	"testing"
 
 	"github.com/DATA-DOG/go-sqlmock"
@@ -156,6 +157,54 @@ func TestQueryPointer(t *testing.T) {
 	follow := got.Next()
 	if follow {
 		t.Fatalf("unmet expectations, it should ahve no more data")
+	}
+
+	if err := mock.ExpectationsWereMet(); err != nil {
+		t.Fatalf("unmet expectations: %v", err)
+	}
+}
+
+func TestQueryDeleteReturning(t *testing.T) {
+	type User struct {
+		ID   int    `sql:"id"`
+		Name string `sql:"name"`
+	}
+
+	stmt := Delete[User](nil).Where("id=?", 1).Returning("id", "name")
+
+	db, mock, err := sqlmock.New()
+	if err != nil {
+		t.Fatalf("sqlmock.New: %v", err)
+	}
+	defer db.Close()
+
+	rows := sqlmock.NewRows([]string{"id", "name"}).AddRow(1, "Alice")
+
+	sqlStr, err := stmt.Write()
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	mock.ExpectQuery(regexp.QuoteMeta(sqlStr)).WithArgs(1).WillReturnRows(rows)
+
+	iter, err := QueryContext[User](context.Background(), db, stmt)
+	if err != nil {
+		t.Fatalf("Query returned error: %v", err)
+	}
+	defer iter.Close()
+
+	var user User
+	if !iter.Next() {
+		t.Fatalf("expected one row")
+	}
+	if err := iter.Scan(&user); err != nil {
+		t.Fatalf("scan error: %v", err)
+	}
+	if user.ID != 1 || user.Name != "Alice" {
+		t.Fatalf("unexpected user: %+v", user)
+	}
+	if iter.Next() {
+		t.Fatalf("unexpected additional rows")
 	}
 
 	if err := mock.ExpectationsWereMet(); err != nil {

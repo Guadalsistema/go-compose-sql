@@ -268,6 +268,35 @@ func TestDelete(t *testing.T) {
 	}
 }
 
+func TestDeleteReturning(t *testing.T) {
+	type User struct{}
+
+	stmt := Delete[User](nil).Where("id=?", 1).Returning("id")
+	expected := "DELETE FROM user WHERE id=? RETURNING id;"
+	got, err := stmt.Write()
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if got != expected {
+		t.Fatalf("unexpected SQL: %s", got)
+	}
+}
+
+func TestReturningRequiresDML(t *testing.T) {
+	stmt := Select[struct{}](nil).Returning("id")
+	if _, err := stmt.Write(); err == nil {
+		t.Fatalf("expected error for misplaced RETURNING clause")
+	} else {
+		var clauseErr *ErrMisplacedClause
+		if !errors.As(err, &clauseErr) {
+			t.Fatalf("expected ErrMisplacedClause, got %v", err)
+		}
+		if clauseErr.Clause != string(ClauseReturning) {
+			t.Fatalf("unexpected clause: %s", clauseErr.Clause)
+		}
+	}
+}
+
 func TestSnakeCase(t *testing.T) {
 	cases := map[string]string{
 		"User":       "user",

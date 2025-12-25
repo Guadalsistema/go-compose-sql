@@ -10,17 +10,18 @@ import (
 type ClauseType string
 
 const (
-	ClauseInsert   ClauseType = "INSERT"
-	ClauseSelect   ClauseType = "SELECT"
-	ClauseUpdate   ClauseType = "UPDATE"
-	ClauseDelete   ClauseType = "DELETE"
-	ClauseWhere    ClauseType = "WHERE"
-	ClauseOrderBy  ClauseType = "ORDER BY"
-	ClauseLimit    ClauseType = "LIMIT"
-	ClauseOffset   ClauseType = "OFFSET"
-	ClauseCoalesce ClauseType = "COALESCE"
-	ClauseDesc     ClauseType = "DESC"
-	ClauseAsc      ClauseType = "ASC"
+	ClauseInsert    ClauseType = "INSERT"
+	ClauseSelect    ClauseType = "SELECT"
+	ClauseUpdate    ClauseType = "UPDATE"
+	ClauseDelete    ClauseType = "DELETE"
+	ClauseWhere     ClauseType = "WHERE"
+	ClauseOrderBy   ClauseType = "ORDER BY"
+	ClauseLimit     ClauseType = "LIMIT"
+	ClauseOffset    ClauseType = "OFFSET"
+	ClauseCoalesce  ClauseType = "COALESCE"
+	ClauseReturning ClauseType = "RETURNING"
+	ClauseDesc      ClauseType = "DESC"
+	ClauseAsc       ClauseType = "ASC"
 )
 
 // SqlClause represents a SQL statement before rendering.
@@ -66,6 +67,12 @@ func (c SqlClause) Write() (string, error) {
 		return "DESC", nil
 	case ClauseAsc:
 		return "ASC", nil
+	case ClauseReturning:
+		cols := "*"
+		if len(c.ColumnNames) > 0 {
+			cols = strings.Join(c.ColumnNames, ", ")
+		}
+		return fmt.Sprintf("RETURNING %s", cols), nil
 	default:
 		return "", NewErrInvalidClause(string(c.Type))
 	}
