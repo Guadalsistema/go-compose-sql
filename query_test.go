@@ -164,6 +164,54 @@ func TestQueryPointer(t *testing.T) {
 	}
 }
 
+func TestQueryInsertReturning(t *testing.T) {
+	type User struct {
+		ID   int    `sql:"id"`
+		Name string `sql:"name"`
+	}
+
+	stmt := Insert[User](nil).Returning("id")
+
+	db, mock, err := sqlmock.New()
+	if err != nil {
+		t.Fatalf("sqlmock.New: %v", err)
+	}
+	defer db.Close()
+
+	rows := sqlmock.NewRows([]string{"id"}).AddRow(42)
+
+	sqlStr, err := stmt.Write()
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	mock.ExpectQuery(regexp.QuoteMeta(sqlStr)).WillReturnRows(rows)
+
+	iter, err := QueryContext[User](context.Background(), db, stmt)
+	if err != nil {
+		t.Fatalf("Query returned error: %v", err)
+	}
+	defer iter.Close()
+
+	var user User
+	if !iter.Next() {
+		t.Fatalf("expected one row")
+	}
+	if err := iter.Scan(&user); err != nil {
+		t.Fatalf("scan error: %v", err)
+	}
+	if user.ID != 42 {
+		t.Fatalf("unexpected user ID: %d", user.ID)
+	}
+	if iter.Next() {
+		t.Fatalf("unexpected additional rows")
+	}
+
+	if err := mock.ExpectationsWereMet(); err != nil {
+		t.Fatalf("unmet expectations: %v", err)
+	}
+}
+
 func TestQueryDeleteReturning(t *testing.T) {
 	type User struct {
 		ID   int    `sql:"id"`

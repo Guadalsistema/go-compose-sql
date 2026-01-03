@@ -23,9 +23,16 @@ func Exec(db *sql.DB, stmt SQLStatement, models ...any) (sql.Result, error) {
 // ColumnNames match the fields in the model. ExecContext returns an error if
 // the first clause is not an INSERT clause. It executes the statement once for
 // each provided model and returns the result of the final execution.
+//
+// If the statement contains a RETURNING clause, ExecContext returns an error
+// because Exec cannot retrieve returned values. Use Query instead.
 func ExecContext(ctx context.Context, db *sql.DB, stmt SQLStatement, models ...any) (sql.Result, error) {
 	if len(stmt.Clauses) == 0 || stmt.Clauses[0].Type != ClauseInsert {
 		return nil, fmt.Errorf("sqlcompose: Exec requires an INSERT clause")
+	}
+
+	if hasReturningClause(stmt) {
+		return nil, fmt.Errorf("sqlcompose: Exec cannot be used with RETURNING clause, use Query instead")
 	}
 
 	if len(models) == 0 {

@@ -158,7 +158,7 @@ func TestExecReturning(t *testing.T) {
 
 	stmt := Insert[User](nil).Returning("id")
 
-	db, mock, err := sqlmock.New()
+	db, _, err := sqlmock.New()
 	if err != nil {
 		t.Fatalf("sqlmock.New: %v", err)
 	}
@@ -166,21 +166,10 @@ func TestExecReturning(t *testing.T) {
 
 	u := User{ID: 3, Name: "Alice"}
 
-	sqlStr, err := stmt.Write()
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-
-	mock.ExpectExec(regexp.QuoteMeta(sqlStr)).
-		WithArgs(u.ID, u.Name).
-		WillReturnResult(sqlmock.NewResult(3, 1))
-
-	if _, err := Exec(db, stmt, u); err != nil {
-		t.Fatalf("Exec returned error: %v", err)
-	}
-
-	if err := mock.ExpectationsWereMet(); err != nil {
-		t.Fatalf("unmet expectations: %v", err)
+	if _, err := Exec(db, stmt, u); err == nil {
+		t.Fatalf("expected error when using Exec with RETURNING clause")
+	} else if !errors.Is(err, errors.New("sqlcompose: Exec cannot be used with RETURNING clause, use Query instead")) && err.Error() != "sqlcompose: Exec cannot be used with RETURNING clause, use Query instead" {
+		t.Fatalf("unexpected error message: %v", err)
 	}
 }
 

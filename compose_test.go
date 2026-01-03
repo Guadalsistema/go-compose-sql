@@ -45,6 +45,42 @@ func TestInsertWithTableOpt(t *testing.T) {
 	}
 }
 
+func TestInsertReturning(t *testing.T) {
+	type User struct {
+		ID        int `db:"id"`
+		FirstName string
+		LastName  string `db:"last_name"`
+	}
+
+	stmt := Insert[User](nil).Returning("id")
+	expected := "INSERT INTO user (id, first_name, last_name) VALUES (?, ?, ?) RETURNING id;"
+	got, err := stmt.Write()
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if got != expected {
+		t.Fatalf("unexpected SQL: %s", got)
+	}
+}
+
+func TestInsertReturningAll(t *testing.T) {
+	type User struct {
+		ID        int `db:"id"`
+		FirstName string
+		LastName  string `db:"last_name"`
+	}
+
+	stmt := Insert[User](nil).Returning()
+	expected := "INSERT INTO user (id, first_name, last_name) VALUES (?, ?, ?) RETURNING *;"
+	got, err := stmt.Write()
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if got != expected {
+		t.Fatalf("unexpected SQL: %s", got)
+	}
+}
+
 func TestSelect(t *testing.T) {
 	type User struct {
 		ID        int `db:"id"`
