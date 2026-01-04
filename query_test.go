@@ -457,3 +457,107 @@ func TestQueryOneInsertValuesReturningDifferentType(t *testing.T) {
 		t.Fatalf("unmet expectations: %v", err)
 	}
 }
+
+func TestInsertValuesReturningIdWithQueryOne(t *testing.T) {
+	type OdooInstance struct {
+		ID   int64  `db:"id"`
+		Name string `db:"name"`
+		URL  string `db:"url"`
+	}
+
+	instance := OdooInstance{
+		ID:   0, // Will be set by database
+		Name: "Production",
+		URL:  "https://example.odoo.com",
+	}
+
+	stmt := Insert[OdooInstance](nil).Values(instance).Returning("id")
+
+	db, mock, err := sqlmock.New()
+	if err != nil {
+		t.Fatalf("sqlmock.New: %v", err)
+	}
+	defer db.Close()
+
+	sqlStr, err := stmt.Write()
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	// Mock expects the INSERT to return the generated ID
+	rows := sqlmock.NewRows([]string{"id"}).AddRow(int64(42))
+	mock.ExpectQuery(regexp.QuoteMeta(sqlStr)).
+		WithArgs(int64(0), "Production", "https://example.odoo.com").
+		WillReturnRows(rows)
+
+	// QueryOne should successfully return int64
+	id, err := QueryOne[int64](db, stmt)
+	if err != nil {
+		t.Fatalf("QueryOne returned error: %v", err)
+	}
+
+	if id != 42 {
+		t.Fatalf("expected id=42, got %d", id)
+	}
+
+	if err := mock.ExpectationsWereMet(); err != nil {
+		t.Fatalf("unmet expectations: %v", err)
+	}
+}
+
+func TestInsertValuesReturningMultipleColumnsWithQueryOne(t *testing.T) {
+	type User struct {
+		ID        int64  `db:"id"`
+		FirstName string `db:"first_name"`
+		LastName  string `db:"last_name"`
+	}
+
+	type InsertResult struct {
+		ID        int64  `db:"id"`
+		FirstName string `db:"first_name"`
+	}
+
+	user := User{
+		ID:        0,
+		FirstName: "John",
+		LastName:  "Doe",
+	}
+
+	stmt := Insert[User](nil).Values(user).Returning("id", "first_name")
+
+	db, mock, err := sqlmock.New()
+	if err != nil {
+		t.Fatalf("sqlmock.New: %v", err)
+	}
+	defer db.Close()
+
+	sqlStr, err := stmt.Write()
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	// Mock expects the INSERT to return id and first_name
+	rows := sqlmock.NewRows([]string{"id", "first_name"}).
+		AddRow(int64(99), "John")
+	mock.ExpectQuery(regexp.QuoteMeta(sqlStr)).
+		WithArgs(int64(0), "John", "Doe").
+		WillReturnRows(rows)
+
+	// QueryOne should successfully return the InsertResult struct
+	result, err := QueryOne[InsertResult](db, stmt)
+	if err != nil {
+		t.Fatalf("QueryOne returned error: %v", err)
+	}
+
+	if result.ID != 99 {
+		t.Fatalf("expected id=99, got %d", result.ID)
+	}
+
+	if result.FirstName != "John" {
+		t.Fatalf("expected first_name=John, got %s", result.FirstName)
+	}
+
+	if err := mock.ExpectationsWereMet(); err != nil {
+		t.Fatalf("unmet expectations: %v", err)
+	}
+}

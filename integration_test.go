@@ -81,7 +81,7 @@ func TestIntegrationInsertValuesReturningID(t *testing.T) {
 		Fields: []string{"name", "url", "database", "username", "password", "client_id"},
 	}
 	query := Insert[OdooInstance](opts).Values(instance).Returning("id")
-	
+
 	idInstance, err := QueryOne[int64](db, query)
 	if err != nil {
 		t.Fatalf("INSERT with RETURNING failed: %v", err)
@@ -127,7 +127,7 @@ func TestIntegrationInsertValuesReturningMultipleColumns(t *testing.T) {
 		Fields: []string{"name", "url", "database", "username", "password", "client_id"},
 	}
 	query := Insert[OdooInstance](opts).Values(instance).Returning("id", "name", "url")
-	
+
 	result, err := QueryOne[InsertResult](db, query)
 	if err != nil {
 		t.Fatalf("INSERT with RETURNING multiple columns failed: %v", err)
@@ -343,17 +343,17 @@ func TestIntegrationDebugSQL(t *testing.T) {
 	if err != nil {
 		t.Fatalf("failed to write SQL: %v", err)
 	}
-	
+
 	t.Logf("Generated SQL: %s", sql)
 	t.Logf("Args: %v", query.Args())
-	
+
 	// Try executing manually to see what happens
 	rows, err := db.Query(sql, query.Args()...)
 	if err != nil {
 		t.Fatalf("query failed: %v", err)
 	}
 	defer rows.Close()
-	
+
 	if rows.Next() {
 		var id int64
 		err = rows.Scan(&id)
@@ -364,4 +364,229 @@ func TestIntegrationDebugSQL(t *testing.T) {
 	} else {
 		t.Fatal("no rows returned")
 	}
+}
+
+func TestIntegrationInsertValuesRespectsFieldsOption(t *testing.T) {
+	db := setupTestDB(t)
+	defer db.Close()
+
+	instance := OdooInstance{
+		ID:        999, // This should NOT be inserted
+		Name:      "Partial Instance",
+		URL:       "https://partial.odoo.com",
+		Database:  "partial_db",
+		Username:  "admin",
+		Password:  "secret",
+		ClientID:  1,
+		CreatedAt: time.Now(), // This should NOT be inserted
+	}
+
+	// Only insert specific fields - excluding id and created_at
+	opts := &SqlOpts{
+		Fields: []string{"name", "url", "database"},
+	}
+	// Only return the fields we actually inserted (plus id)
+	query := Insert[OdooInstance](opts).Values(instance).Returning("id", "name", "url", "database")
+
+	type PartialResult struct {
+		ID       int64  `db:"id"`
+		Name     string `db:"name"`
+		URL      string `db:"url"`
+		Database string `db:"database"`
+	}
+
+	result, err := QueryOne[PartialResult](db, query)
+	if err != nil {
+		t.Fatalf("INSERT with partial fields failed: %v", err)
+	}
+
+	// Verify the specified fields were inserted
+	if result.Name != "Partial Instance" {
+		t.Fatalf("expected name 'Partial Instance', got %s", result.Name)
+	}
+	if result.URL != "https://partial.odoo.com" {
+		t.Fatalf("expected url 'https://partial.odoo.com', got %s", result.URL)
+	}
+	if result.Database != "partial_db" {
+		t.Fatalf("expected database 'partial_db', got %s", result.Database)
+	}
+
+	// Verify the excluded fields were NOT inserted (should be default/empty)
+	if result.ID == 999 {
+		t.Fatalf("id should be auto-generated, not 999")
+	}
+
+	// Query the database directly to verify excluded fields are NULL/empty
+	var username, password sql.NullString
+	err = db.QueryRow("SELECT username, password FROM odoo_instance WHERE id = ?", result.ID).Scan(&username, &password)
+	if err != nil {
+		t.Fatalf("failed to verify excluded fields: %v", err)
+	}
+
+	if username.Valid && username.String != "" {
+		t.Fatalf("username should be NULL (not inserted), got %s", username.String)
+	}
+	if password.Valid && password.String != "" {
+		t.Fatalf("password should be NULL (not inserted), got %s", password.String)
+	}
+
+	t.Logf("Successfully inserted only specified fields: name=%s, url=%s, database=%s", result.Name, result.URL, result.Database)
+	t.Logf("Excluded fields correctly defaulted: id=%d, username=NULL, password=NULL", result.ID)
+}
+
+func TestIntegrationUpdateValuesRespectsFieldsOption(t *testing.T) {
+	db := setupTestDB(t)
+	defer db.Close()
+
+	// First, insert a complete record
+	instance := OdooInstance{
+		Name:     "Original Instance",
+		URL:      "https://original.odoo.com",
+		Database: "original_db",
+		Username: "originaluser",
+		Password: "originalpass",
+		ClientID: 1,
+	}
+
+	opts := &SqlOpts{
+		Fields: []string{"name", "url", "database", "username", "password", "client_id"},
+	}
+	insertQuery := Insert[OdooInstance](opts).Values(instance).Returning("id")
+	id, err := QueryOne[int64](db, insertQuery)
+	if err != nil {
+		t.Fatalf("failed to insert initial record: %v", err)
+	}
+
+	// Now update only specific fields using Values
+	updatedInstance := OdooInstance{
+		ID:       id,
+		Name:     "Updated Name",         // Should be updated
+		URL:      "https://new.odoo.com", // Should be updated
+		Database: "should_not_change",    // Should NOT be updated (not in Fields)
+		Username: "should_not_change",    // Should NOT be updated (not in Fields)
+		Password: "newpass",              // Should be updated
+		ClientID: 1,
+	}
+
+	// Only update name, url, and password - exclude database and username
+	updateOpts := &SqlOpts{
+		Fields: []string{"name", "url", "password"},
+	}
+	updateQuery := Update[OdooInstance](updateOpts).Values(updatedInstance).Where("id=?", id)
+	res, err := Exec(db, updateQuery)
+	if err != nil {
+		t.Fatalf("UPDATE with partial fields failed: %v", err)
+	}
+
+	rowsAffected, err := res.RowsAffected()
+	if err != nil {
+		t.Fatalf("failed to get rows affected: %v", err)
+	}
+	if rowsAffected != 1 {
+		t.Fatalf("expected 1 row affected, got %d", rowsAffected)
+	}
+
+	// Verify only the specified fields were updated
+	var name, url, database, username, password string
+	err = db.QueryRow("SELECT name, url, database, username, password FROM odoo_instance WHERE id = ?", id).
+		Scan(&name, &url, &database, &username, &password)
+	if err != nil {
+		t.Fatalf("failed to verify update: %v", err)
+	}
+
+	// Check updated fields
+	if name != "Updated Name" {
+		t.Fatalf("expected name 'Updated Name', got %s", name)
+	}
+	if url != "https://new.odoo.com" {
+		t.Fatalf("expected url 'https://new.odoo.com', got %s", url)
+	}
+	if password != "newpass" {
+		t.Fatalf("expected password 'newpass', got %s", password)
+	}
+
+	// Check that excluded fields were NOT updated
+	if database != "original_db" {
+		t.Fatalf("database should remain 'original_db', got %s", database)
+	}
+	if username != "originaluser" {
+		t.Fatalf("username should remain 'originaluser', got %s", username)
+	}
+
+	t.Logf("Successfully updated only specified fields:")
+	t.Logf("  Updated: name=%s, url=%s, password=%s", name, url, password)
+	t.Logf("  Unchanged: database=%s, username=%s", database, username)
+}
+
+func TestIntegrationValuesWithFieldsDebug(t *testing.T) {
+	db := setupTestDB(t)
+	defer db.Close()
+
+	instance := OdooInstance{
+		ID:       999,
+		Name:     "Test",
+		URL:      "https://test.com",
+		Database: "test_db",
+		Username: "admin",
+		Password: "secret",
+		ClientID: 1,
+	}
+
+	// Test INSERT with partial fields
+	insertOpts := &SqlOpts{
+		Fields: []string{"name", "url"},
+	}
+	insertQuery := Insert[OdooInstance](insertOpts).Values(instance)
+
+	sql, err := insertQuery.Write()
+	if err != nil {
+		t.Fatalf("failed to write SQL: %v", err)
+	}
+
+	t.Logf("INSERT SQL: %s", sql)
+	t.Logf("INSERT Args: %v", insertQuery.Args())
+
+	// Verify only 2 fields are in the SQL and args
+	expectedSQL := "INSERT INTO odoo_instance (name, url) VALUES (?, ?);"
+	if sql != expectedSQL {
+		t.Fatalf("expected SQL %q, got %q", expectedSQL, sql)
+	}
+
+	args := insertQuery.Args()
+	if len(args) != 2 {
+		t.Fatalf("expected 2 args, got %d: %v", len(args), args)
+	}
+	if args[0] != "Test" || args[1] != "https://test.com" {
+		t.Fatalf("expected args [Test, https://test.com], got %v", args)
+	}
+
+	// Test UPDATE with partial fields
+	updateOpts := &SqlOpts{
+		Fields: []string{"name", "database"},
+	}
+	updateQuery := Update[OdooInstance](updateOpts).Values(instance).Where("id=?", 1)
+
+	sql, err = updateQuery.Write()
+	if err != nil {
+		t.Fatalf("failed to write SQL: %v", err)
+	}
+
+	t.Logf("UPDATE SQL: %s", sql)
+	t.Logf("UPDATE Args: %v", updateQuery.Args())
+
+	// Verify only 2 fields are in the UPDATE SET clause
+	expectedSQL = "UPDATE odoo_instance SET name=?, database=? WHERE id=?;"
+	if sql != expectedSQL {
+		t.Fatalf("expected SQL %q, got %q", expectedSQL, sql)
+	}
+
+	args = updateQuery.Args()
+	if len(args) != 3 { // 2 from Values + 1 from WHERE
+		t.Fatalf("expected 3 args, got %d: %v", len(args), args)
+	}
+	if args[0] != "Test" || args[1] != "test_db" || args[2] != 1 {
+		t.Fatalf("expected args [Test, test_db, 1], got %v", args)
+	}
+
+	t.Log("Fields option correctly filters which struct fields are used in Values()")
 }

@@ -487,3 +487,99 @@ func TestExecUpdateWithValuesStruct(t *testing.T) {
 		t.Fatalf("unmet expectations: %v", err)
 	}
 }
+
+func TestUpdateWithoutValuesOrModelFails(t *testing.T) {
+	type User struct {
+		ID   int    `db:"id"`
+		Name string `db:"name"`
+	}
+
+	// This should fail because UPDATE needs either Values() or a model passed to Exec
+	stmt := Update[User](nil).Where("id=?", 1)
+
+	db, _, err := sqlmock.New()
+	if err != nil {
+		t.Fatalf("sqlmock.New: %v", err)
+	}
+	defer db.Close()
+
+	// Should fail with clear error message
+	_, err = Exec(db, stmt)
+	if err == nil {
+		t.Fatalf("expected error for UPDATE without Values or model")
+	}
+
+	expectedErr := "sqlcompose: Exec requires at least one model"
+	if err.Error() != expectedErr {
+		t.Fatalf("expected error %q, got %q", expectedErr, err.Error())
+	}
+}
+
+func TestUpdateWithValuesWorks(t *testing.T) {
+	type User struct {
+		ID   int    `db:"id"`
+		Name string `db:"name"`
+	}
+
+	user := User{ID: 1, Name: "Updated Name"}
+	stmt := Update[User](nil).Values(user).Where("id=?", 1)
+
+	db, mock, err := sqlmock.New()
+	if err != nil {
+		t.Fatalf("sqlmock.New: %v", err)
+	}
+	defer db.Close()
+
+	sqlStr, err := stmt.Write()
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	// Expect UPDATE with values from struct + WHERE clause arg
+	mock.ExpectExec(regexp.QuoteMeta(sqlStr)).
+		WithArgs(1, "Updated Name", 1).
+		WillReturnResult(sqlmock.NewResult(0, 1))
+
+	if _, err := Exec(db, stmt); err != nil {
+		t.Fatalf("Exec returned error: %v", err)
+	}
+
+	if err := mock.ExpectationsWereMet(); err != nil {
+		t.Fatalf("unmet expectations: %v", err)
+	}
+}
+
+func TestUpdateWithModelWorks(t *testing.T) {
+	type User struct {
+		ID   int    `db:"id"`
+		Name string `db:"name"`
+	}
+
+	user := User{ID: 1, Name: "Updated Name"}
+	stmt := Update[User](nil).Where("id=?", 1)
+
+	db, mock, err := sqlmock.New()
+	if err != nil {
+		t.Fatalf("sqlmock.New: %v", err)
+	}
+	defer db.Close()
+
+	sqlStr, err := stmt.Write()
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	// Expect UPDATE with values from model passed to Exec + WHERE clause arg
+	mock.ExpectExec(regexp.QuoteMeta(sqlStr)).
+		WithArgs(1, "Updated Name", 1).
+		WillReturnResult(sqlmock.NewResult(0, 1))
+
+	// Pass model to Exec (traditional approach)
+	if _, err := Exec(db, stmt, user); err != nil {
+		t.Fatalf("Exec returned error: %v", err)
+	}
+
+	if err := mock.ExpectationsWereMet(); err != nil {
+		t.Fatalf("unmet expectations: %v", err)
+	}
+}
