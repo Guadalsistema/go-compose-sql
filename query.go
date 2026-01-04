@@ -32,16 +32,22 @@ func (iter *QueryRowIterator[T]) Err() error {
 
 // Scan scans the current row into the given destination.
 func (iter *QueryRowIterator[T]) Scan(dest *T) error {
-	pv := reflect.New(iter.model)
-	if err := sqlstruct.Scan(pv.Interface(), iter.rows); err != nil {
-		return err
+	// Check if T is a struct type that needs sqlstruct.Scan
+	if iter.model.Kind() == reflect.Struct {
+		pv := reflect.New(iter.model)
+		if err := sqlstruct.Scan(pv.Interface(), iter.rows); err != nil {
+			return err
+		}
+		if iter.isPtr {
+			*dest = pv.Interface().(T)
+		} else {
+			*dest = pv.Elem().Interface().(T)
+		}
+		return nil
 	}
-	if iter.isPtr {
-		*dest = pv.Interface().(T)
-	} else {
-		*dest = pv.Elem().Interface().(T)
-	}
-	return nil
+
+	// For non-struct types (primitives, etc.), use standard rows.Scan
+	return iter.rows.Scan(dest)
 }
 
 // Close closes the iterator, releasing any underlying resources.
@@ -78,12 +84,16 @@ func QueryContext[T any](ctx context.Context, db *sql.DB, stmt SQLStatement) (*Q
 		return nil, err
 	}
 
-	isPtr := reflect.TypeOf((*T)(nil)).Elem().Kind() == reflect.Pointer
+	typ := reflect.TypeOf((*T)(nil)).Elem()
+	isPtr := typ.Kind() == reflect.Pointer
+	if isPtr {
+		typ = typ.Elem()
+	}
 
 	return &QueryRowIterator[T]{
 		rows:  rows,
 		isPtr: isPtr,
-		model: first.ModelType,
+		model: typ,
 	}, nil
 }
 

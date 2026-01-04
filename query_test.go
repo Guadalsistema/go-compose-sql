@@ -416,3 +416,44 @@ func TestQueryMisplacedClause(t *testing.T) {
 		}
 	}
 }
+
+func TestQueryOneInsertValuesReturningDifferentType(t *testing.T) {
+	type User struct {
+		ID   int64  `db:"id"`
+		Name string `db:"name"`
+	}
+
+	user := User{Name: "Alice"}
+	stmt := Insert[User](nil).Values(user).Returning("id")
+
+	db, mock, err := sqlmock.New()
+	if err != nil {
+		t.Fatalf("sqlmock.New: %v", err)
+	}
+	defer db.Close()
+
+	sqlStr, err := stmt.Write()
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	// Expect the query to return just the ID
+	rows := sqlmock.NewRows([]string{"id"}).AddRow(int64(42))
+	mock.ExpectQuery(regexp.QuoteMeta(sqlStr)).
+		WithArgs(int64(0), "Alice").
+		WillReturnRows(rows)
+
+	// QueryOne should return int64, not User
+	id, err := QueryOne[int64](db, stmt)
+	if err != nil {
+		t.Fatalf("QueryOne returned error: %v", err)
+	}
+
+	if id != 42 {
+		t.Fatalf("expected id=42, got %d", id)
+	}
+
+	if err := mock.ExpectationsWereMet(); err != nil {
+		t.Fatalf("unmet expectations: %v", err)
+	}
+}
