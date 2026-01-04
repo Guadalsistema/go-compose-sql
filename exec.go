@@ -41,7 +41,8 @@ func ExecContext(ctx context.Context, db *sql.DB, stmt SQLStatement, models ...a
 		return nil, fmt.Errorf("sqlcompose: Exec cannot be used with RETURNING clause, use Query instead")
 	}
 
-	if len(models) == 0 && stmt.Clauses[0].Type != ClauseDelete {
+	hasValues := hasValuesClause(stmt)
+	if len(models) == 0 && stmt.Clauses[0].Type != ClauseDelete && !hasValues {
 		return nil, fmt.Errorf("sqlcompose: Exec requires at least one model")
 	}
 
@@ -58,7 +59,7 @@ func ExecContext(ctx context.Context, db *sql.DB, stmt SQLStatement, models ...a
 
 	var res sql.Result
 
-	if len(models) == 0 && stmt.Clauses[0].Type == ClauseDelete {
+	if len(models) == 0 && (stmt.Clauses[0].Type == ClauseDelete || hasValues) {
 		return db.ExecContext(ctx, sqlStmt, stmt.Args()...)
 	}
 

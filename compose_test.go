@@ -524,3 +524,87 @@ func TestUpdateWithFieldsOpt(t *testing.T) {
 		t.Fatalf("unexpected SQL with fields opt: %s", got)
 	}
 }
+
+func TestInsertValues(t *testing.T) {
+	type User struct {
+		ID        int    `db:"id"`
+		FirstName string `db:"first_name"`
+		LastName  string `db:"last_name"`
+	}
+
+	stmt := Insert[User](nil).Values(1, "Alice", "Smith")
+	expected := "INSERT INTO user (id, first_name, last_name) VALUES (?, ?, ?);"
+	got, err := stmt.Write()
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if got != expected {
+		t.Fatalf("unexpected SQL: got %s, want %s", got, expected)
+	}
+
+	args := stmt.Args()
+	if len(args) != 3 {
+		t.Fatalf("expected 3 args, got %d", len(args))
+	}
+	if args[0] != 1 || args[1] != "Alice" || args[2] != "Smith" {
+		t.Fatalf("unexpected args: %v", args)
+	}
+}
+
+func TestInsertValuesPostgres(t *testing.T) {
+	type User struct {
+		ID   int    `db:"id"`
+		Name string `db:"name"`
+	}
+
+	stmt := Insert[User](&SqlOpts{Driver: PostgresDriver{}}).Values(42, "Bob")
+	expected := "INSERT INTO user (id, name) VALUES ($1, $2)"
+	got, err := stmt.Write()
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if got != expected {
+		t.Fatalf("unexpected SQL: got %s, want %s", got, expected)
+	}
+
+	args := stmt.Args()
+	if len(args) != 2 {
+		t.Fatalf("expected 2 args, got %d", len(args))
+	}
+	if args[0] != 42 || args[1] != "Bob" {
+		t.Fatalf("unexpected args: %v", args)
+	}
+}
+
+func TestInsertValuesReturning(t *testing.T) {
+	type User struct {
+		ID   int    `db:"id"`
+		Name string `db:"name"`
+	}
+
+	stmt := Insert[User](nil).Values(1, "Alice").Returning("id")
+	expected := "INSERT INTO user (id, name) VALUES (?, ?) RETURNING id;"
+	got, err := stmt.Write()
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if got != expected {
+		t.Fatalf("unexpected SQL: got %s, want %s", got, expected)
+	}
+}
+
+func TestValuesRequiresInsert(t *testing.T) {
+	type User struct {
+		ID int `db:"id"`
+	}
+
+	stmt := Select[User](nil).Values(1)
+	_, err := stmt.Write()
+	var clauseErr *ErrMisplacedClause
+	if !errors.As(err, &clauseErr) {
+		t.Fatalf("expected ErrMisplacedClause, got %v", err)
+	}
+	if clauseErr.Clause != string(ClauseValues) {
+		t.Fatalf("expected VALUES clause error, got %s", clauseErr.Clause)
+	}
+}

@@ -135,3 +135,12 @@ func hasReturningClause(stmt SQLStatement) bool {
 	}
 	return false
 }
+
+func hasValuesClause(stmt SQLStatement) bool {
+	for _, clause := range stmt.Clauses {
+		if clause.Type == ClauseValues {
+			return true
+		}
+	}
+	return false
+}

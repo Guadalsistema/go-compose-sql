@@ -357,3 +357,67 @@ func TestExecJoinQueryReturnsError(t *testing.T) {
 		t.Fatalf("expected error for Exec with SELECT clause")
 	}
 }
+
+func TestExecWithValues(t *testing.T) {
+	type User struct {
+		ID   int    `db:"id"`
+		Name string `db:"name"`
+	}
+
+	stmt := Insert[User](nil).Values(42, "Alice")
+
+	db, mock, err := sqlmock.New()
+	if err != nil {
+		t.Fatalf("sqlmock.New: %v", err)
+	}
+	defer db.Close()
+
+	sqlStr, err := stmt.Write()
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	mock.ExpectExec(regexp.QuoteMeta(sqlStr)).
+		WithArgs(42, "Alice").
+		WillReturnResult(sqlmock.NewResult(1, 1))
+
+	if _, err := Exec(db, stmt); err != nil {
+		t.Fatalf("Exec returned error: %v", err)
+	}
+
+	if err := mock.ExpectationsWereMet(); err != nil {
+		t.Fatalf("unmet expectations: %v", err)
+	}
+}
+
+func TestExecWithValuesMultiple(t *testing.T) {
+	type User struct {
+		ID   int    `db:"id"`
+		Name string `db:"name"`
+	}
+
+	stmt := Insert[User](nil).Values(1, "Alice")
+
+	db, mock, err := sqlmock.New()
+	if err != nil {
+		t.Fatalf("sqlmock.New: %v", err)
+	}
+	defer db.Close()
+
+	sqlStr, err := stmt.Write()
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	mock.ExpectExec(regexp.QuoteMeta(sqlStr)).
+		WithArgs(1, "Alice").
+		WillReturnResult(sqlmock.NewResult(1, 1))
+
+	if _, err := Exec(db, stmt); err != nil {
+		t.Fatalf("Exec returned error: %v", err)
+	}
+
+	if err := mock.ExpectationsWereMet(); err != nil {
+		t.Fatalf("unmet expectations: %v", err)
+	}
+}

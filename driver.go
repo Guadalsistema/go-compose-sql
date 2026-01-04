@@ -34,6 +34,8 @@ func writeClause(clause SqlClause, argPosition int, placeholders placeholderRend
 			placeholdersList[i] = placeholders.Placeholder(argPosition + i)
 		}
 		return fmt.Sprintf("INSERT INTO %s (%s) VALUES (%s)", clause.TableName, cols, strings.Join(placeholdersList, ", ")), len(placeholdersList), nil
+	case ClauseValues:
+		return "", 0, nil
 	case ClauseSelect:
 		cols := strings.Join(clause.ColumnNames, ", ")
 		return fmt.Sprintf("SELECT %s FROM %s", cols, clause.TableName), 0, nil

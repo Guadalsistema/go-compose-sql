@@ -110,6 +110,13 @@ func (s SQLStatement) Returning(columns ...string) SQLStatement {
 	return s
 }
 
+// Values appends a VALUES clause to INSERT statements with explicit values.
+// This allows specifying values directly instead of extracting them from a struct.
+func (s SQLStatement) Values(values ...any) SQLStatement {
+	s.Clauses = append(s.Clauses, SqlClause{Type: ClauseValues, Args: values})
+	return s
+}
+
 // Asc appends an ASC clause ensuring it follows an ORDER BY clause.
 func (s SQLStatement) Asc() SQLStatement {
 	s.Clauses = append(s.Clauses, SqlClause{Type: ClauseAsc})
@@ -329,6 +336,30 @@ func renderClauses(stmt SQLStatement, driver Driver, renderer placeholderRendere
 			default:
 				return "", 0, NewErrMisplacedClause(string(c.Type))
 			}
+		}
+		if c.Type == ClauseValues {
+			if i == 0 || stmt.Clauses[i-1].Type != ClauseInsert {
+				return "", 0, NewErrMisplacedClause(string(c.Type))
+			}
+			insertClause := parts[len(parts)-1]
+			idx := strings.Index(insertClause, " VALUES ")
+			if idx == -1 {
+				return "", 0, fmt.Errorf("sqlcompose: malformed INSERT clause")
+			}
+			// The INSERT clause already consumed placeholders for its columns,
+			// but we're replacing those with the VALUES clause placeholders.
+			// We need to start from the position before the INSERT consumed them.
+			insertColumns := len(stmt.Clauses[i-1].ColumnNames)
+			valuesStartPos := argPosition - insertColumns
+			placeholdersList := make([]string, len(c.Args))
+			for j := range placeholdersList {
+				placeholdersList[j] = renderer.Placeholder(valuesStartPos + j)
+			}
+			parts[len(parts)-1] = insertClause[:idx] + fmt.Sprintf(" VALUES (%s)", strings.Join(placeholdersList, ", "))
+			// Adjust the position and total: we're replacing insertColumns placeholders with len(c.Args) placeholders
+			argPosition = argPosition - insertColumns + len(placeholdersList)
+			usedTotal = usedTotal - insertColumns + len(placeholdersList)
+			continue
 		}
 		if c.Type == ClauseJoin {
 			joinSQL, used, err := renderJoinClause(stmt, c, driver, renderer, argPosition, i)

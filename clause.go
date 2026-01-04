@@ -22,6 +22,7 @@ const (
 	ClauseReturning ClauseType = "RETURNING"
 	ClauseDesc      ClauseType = "DESC"
 	ClauseAsc       ClauseType = "ASC"
+	ClauseValues    ClauseType = "VALUES"
 )
 
 // SqlClause represents a SQL statement before rendering.
