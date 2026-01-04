@@ -307,6 +307,37 @@ func TestExecUpdateWithFieldsOpt(t *testing.T) {
 	}
 }
 
+func TestExecDelete(t *testing.T) {
+	type User struct {
+		ID int `db:"id"`
+	}
+
+	stmt := Delete[User](nil).Where("id=?", 10)
+
+	db, mock, err := sqlmock.New()
+	if err != nil {
+		t.Fatalf("sqlmock.New: %v", err)
+	}
+	defer db.Close()
+
+	sqlStr, err := stmt.Write()
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	mock.ExpectExec(regexp.QuoteMeta(sqlStr)).
+		WithArgs(10).
+		WillReturnResult(sqlmock.NewResult(0, 1))
+
+	if _, err := Exec(db, stmt); err != nil {
+		t.Fatalf("Exec returned error: %v", err)
+	}
+
+	if err := mock.ExpectationsWereMet(); err != nil {
+		t.Fatalf("unmet expectations: %v", err)
+	}
+}
+
 func TestExecJoinQueryReturnsError(t *testing.T) {
 	type User struct{ ID int }
 	stmt := SQLStatement{

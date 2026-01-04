@@ -9,37 +9,39 @@ import (
 	"github.com/kisielk/sqlstruct"
 )
 
-// Exec executes the INSERT statement against the provided database using
+// Exec executes the INSERT, UPDATE, or DELETE statement against the provided database using
 // context.Background(). It delegates to ExecContext.
 func Exec(db *sql.DB, stmt SQLStatement, models ...any) (sql.Result, error) {
 	return ExecContext(context.Background(), db, stmt, models...)
 }
 
-// ExecContext executes the INSERT SQLStatement against the provided database
+// ExecContext executes the INSERT, UPDATE, or DELETE SQLStatement against the provided database
 // using the supplied context. The models' exported fields are mapped to column
 // names in the first clause and passed as arguments to the INSERT statement.
 //
 // The first clause must be built using Insert[T] so that ModelType and
 // ColumnNames match the fields in the model. ExecContext returns an error if
-// the first clause is not an INSERT clause. It executes the statement once for
-// each provided model and returns the result of the final execution.
+// the first clause is not an INSERT, UPDATE, or DELETE clause. It executes the statement once for
+// each provided model and returns the result of the final execution. For DELETE
+// statements, models are optional; if none are provided the statement is executed
+// once using only the arguments supplied in the builder (e.g., WHERE clause).
 //
 // If the statement contains a RETURNING clause, ExecContext returns an error
 // because Exec cannot retrieve returned values. Use Query instead.
 func ExecContext(ctx context.Context, db *sql.DB, stmt SQLStatement, models ...any) (sql.Result, error) {
 	if len(stmt.Clauses) == 0 {
-		return nil, fmt.Errorf("sqlcompose: Exec requires an INSERT or UPDATE clause")
+		return nil, fmt.Errorf("sqlcompose: Exec requires an INSERT, UPDATE, or DELETE clause")
 	}
 
-	if stmt.Clauses[0].Type != ClauseInsert && stmt.Clauses[0].Type != ClauseUpdate {
-		return nil, fmt.Errorf("sqlcompose: Exec requires an INSERT or UPDATE clause")
+	if stmt.Clauses[0].Type != ClauseInsert && stmt.Clauses[0].Type != ClauseUpdate && stmt.Clauses[0].Type != ClauseDelete {
+		return nil, fmt.Errorf("sqlcompose: Exec requires an INSERT, UPDATE, or DELETE clause")
 	}
 
 	if hasReturningClause(stmt) {
 		return nil, fmt.Errorf("sqlcompose: Exec cannot be used with RETURNING clause, use Query instead")
 	}
 
-	if len(models) == 0 {
+	if len(models) == 0 && stmt.Clauses[0].Type != ClauseDelete {
 		return nil, fmt.Errorf("sqlcompose: Exec requires at least one model")
 	}
 
@@ -55,6 +57,11 @@ func ExecContext(ctx context.Context, db *sql.DB, stmt SQLStatement, models ...a
 	}
 
 	var res sql.Result
+
+	if len(models) == 0 && stmt.Clauses[0].Type == ClauseDelete {
+		return db.ExecContext(ctx, sqlStmt, stmt.Args()...)
+	}
+
 	for _, model := range models {
 		val := reflect.ValueOf(model)
 		for val.Kind() == reflect.Pointer {
