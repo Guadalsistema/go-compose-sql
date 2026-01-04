@@ -12,16 +12,25 @@ import (
 type SqlOpts struct {
 	TableName string
 	Fields    []string
+	// Driver chooses the SQL dialect for rendering; defaults to DefaultDriver when nil.
+	Driver Driver
 }
 
 // SQLStatement represents a sequence of SQL clauses forming a statement.
 type SQLStatement struct {
 	Clauses []SqlClause
+	Driver  Driver
 }
 
-// Write renders the complete SQL statement by concatenating all clauses.
+// Write renders the complete SQL statement by concatenating all clauses using the configured Driver (or DefaultDriver).
 func (s SQLStatement) Write() (string, error) {
+	driver := s.Driver
+	if driver == nil {
+		driver = DefaultDriver
+	}
+
 	var parts []string
+	argPosition := 1
 	for i, c := range s.Clauses {
 		// DESC/ASC must follow ORDER BY
 		if (c.Type == ClauseDesc || c.Type == ClauseAsc) && (i == 0 || s.Clauses[i-1].Type != ClauseOrderBy) {
@@ -34,10 +43,11 @@ func (s SQLStatement) Write() (string, error) {
 				return "", NewErrMisplacedClause(string(c.Type))
 			}
 		}
-		p, err := c.Write()
+		p, used, err := driver.Write(c, argPosition)
 		if err != nil {
 			return "", err
 		}
+		argPosition += used
 		if c.Type == ClauseCoalesce {
 			if i == 0 || s.Clauses[i-1].Type != ClauseSelect {
 				return "", NewErrMisplacedClause(string(c.Type))
@@ -55,7 +65,20 @@ func (s SQLStatement) Write() (string, error) {
 	if len(parts) == 0 {
 		return "", nil
 	}
-	return strings.Join(parts, " ") + ";", nil
+	sql := strings.Join(parts, " ")
+	if needsSemicolon(driver) {
+		sql += ";"
+	}
+	return sql, nil
+}
+
+func needsSemicolon(driver Driver) bool {
+	switch driver.(type) {
+	case PostgresDriver, *PostgresDriver:
+		return false
+	default:
+		return true
+	}
 }
 
 // Args returns the collected arguments from all clauses in the statement.
@@ -165,7 +188,11 @@ func Insert[T any](opts *SqlOpts) SQLStatement {
 		ColumnNames: names,
 		ModelType:   typ,
 	}
-	return SQLStatement{Clauses: []SqlClause{clause}}
+	driver := DefaultDriver
+	if opts != nil && opts.Driver != nil {
+		driver = opts.Driver
+	}
+	return SQLStatement{Clauses: []SqlClause{clause}, Driver: driver}
 }
 
 // Select builds a SELECT statement listing all exported fields of type T.
@@ -215,7 +242,11 @@ func Select[T any](opts *SqlOpts) SQLStatement {
 		ColumnNames: names,
 		ModelType:   typ,
 	}
-	return SQLStatement{Clauses: []SqlClause{clause}}
+	driver := DefaultDriver
+	if opts != nil && opts.Driver != nil {
+		driver = opts.Driver
+	}
+	return SQLStatement{Clauses: []SqlClause{clause}, Driver: driver}
 }
 
 // Delete builds a DELETE statement for type T.
@@ -235,5 +266,9 @@ func Delete[T any](opts *SqlOpts) SQLStatement {
 		TableName: tableName,
 		ModelType: typ,
 	}
-	return SQLStatement{Clauses: []SqlClause{clause}}
+	driver := DefaultDriver
+	if opts != nil && opts.Driver != nil {
+		driver = opts.Driver
+	}
+	return SQLStatement{Clauses: []SqlClause{clause}, Driver: driver}
 }

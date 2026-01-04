@@ -357,3 +357,54 @@ func TestInvalidClause(t *testing.T) {
 		t.Fatalf("unexpected clause name: %s", clauseErr.Clause)
 	}
 }
+
+func TestPostgresDriverNoSemicolon(t *testing.T) {
+	type User struct {
+		ID        int `db:"id"`
+		FirstName string
+	}
+
+	stmt := Select[User](&SqlOpts{Driver: PostgresDriver{}})
+	expected := "SELECT id, first_name FROM user"
+	got, err := stmt.Write()
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if got != expected {
+		t.Fatalf("expected %q, got %q", expected, got)
+	}
+}
+
+func TestDefaultDriverWithSemicolon(t *testing.T) {
+	type User struct {
+		ID        int `db:"id"`
+		FirstName string
+	}
+
+	stmt := Select[User](&SqlOpts{Driver: SQLiteDriver{}})
+	expected := "SELECT id, first_name FROM user;"
+	got, err := stmt.Write()
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if got != expected {
+		t.Fatalf("expected %q, got %q", expected, got)
+	}
+}
+
+func TestPostgresDriverPlaceholders(t *testing.T) {
+	type User struct {
+		ID        int `db:"id"`
+		FirstName string
+	}
+
+	stmt := Select[User](&SqlOpts{Driver: PostgresDriver{}}).Where("id=? AND first_name=?", 1, "bob").Limit(1)
+	expected := "SELECT id, first_name FROM user WHERE id=$1 AND first_name=$2 LIMIT $3"
+	got, err := stmt.Write()
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if got != expected {
+		t.Fatalf("expected %q, got %q", expected, got)
+	}
+}
