@@ -142,6 +142,60 @@ func (s SQLStatement) Asc() SQLStatement {
 	return s
 }
 
+// Update builds an UPDATE statement for type T using the provided options.
+//
+// Column names and table name follow the same rules as Insert. The reflected
+// type is stored in the resulting clause.
+func Update[T any](opts *SqlOpts) SQLStatement {
+	typ := reflect.TypeOf((*T)(nil)).Elem()
+	for typ.Kind() == reflect.Pointer {
+		typ = typ.Elem()
+	}
+
+	tableName := getTableName(sqlstruct.ToSnakeCase(typ.Name()), opts)
+
+	var names []string
+	var fieldFilter map[string]struct{}
+	if opts != nil && len(opts.Fields) > 0 {
+		fieldFilter = make(map[string]struct{}, len(opts.Fields))
+		for _, f := range opts.Fields {
+			fieldFilter[f] = struct{}{}
+		}
+	}
+
+	for i := 0; i < typ.NumField(); i++ {
+		f := typ.Field(i)
+		if f.PkgPath != "" {
+			continue
+		}
+		tag := f.Tag.Get(sqlstruct.TagName)
+		if tag == "-" {
+			continue
+		}
+		if tag == "" {
+			tag = sqlstruct.ToSnakeCase(f.Name)
+		}
+		if fieldFilter != nil {
+			if _, ok := fieldFilter[tag]; !ok {
+				continue
+			}
+		}
+		names = append(names, tag)
+	}
+
+	clause := SqlClause{
+		Type:        ClauseUpdate,
+		TableName:   tableName,
+		ColumnNames: names,
+		ModelType:   typ,
+	}
+	driver := DefaultDriver
+	if opts != nil && opts.Driver != nil {
+		driver = opts.Driver
+	}
+	return SQLStatement{Clauses: []SqlClause{clause}, Driver: driver}
+}
+
 func getTableName(def string, opts *SqlOpts) string {
 	tableName := def
 	if opts != nil && opts.TableName != "" {

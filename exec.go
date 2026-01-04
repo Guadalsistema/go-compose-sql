@@ -27,8 +27,12 @@ func Exec(db *sql.DB, stmt SQLStatement, models ...any) (sql.Result, error) {
 // If the statement contains a RETURNING clause, ExecContext returns an error
 // because Exec cannot retrieve returned values. Use Query instead.
 func ExecContext(ctx context.Context, db *sql.DB, stmt SQLStatement, models ...any) (sql.Result, error) {
-	if len(stmt.Clauses) == 0 || stmt.Clauses[0].Type != ClauseInsert {
-		return nil, fmt.Errorf("sqlcompose: Exec requires an INSERT clause")
+	if len(stmt.Clauses) == 0 {
+		return nil, fmt.Errorf("sqlcompose: Exec requires an INSERT or UPDATE clause")
+	}
+
+	if stmt.Clauses[0].Type != ClauseInsert && stmt.Clauses[0].Type != ClauseUpdate {
+		return nil, fmt.Errorf("sqlcompose: Exec requires an INSERT or UPDATE clause")
 	}
 
 	if hasReturningClause(stmt) {
@@ -40,6 +44,10 @@ func ExecContext(ctx context.Context, db *sql.DB, stmt SQLStatement, models ...a
 	}
 
 	first := stmt.Clauses[0]
+	columns := make(map[string]struct{}, len(first.ColumnNames))
+	for _, c := range first.ColumnNames {
+		columns[c] = struct{}{}
+	}
 
 	sqlStmt, err := stmt.Write()
 	if err != nil {
@@ -57,14 +65,22 @@ func ExecContext(ctx context.Context, db *sql.DB, stmt SQLStatement, models ...a
 			return nil, fmt.Errorf("sqlcompose: model type %T does not match clause type %s", model, first.ModelType)
 		}
 
-		args := make([]any, 0, first.ModelType.NumField())
+		args := make([]any, 0, len(columns)+len(stmt.Args()))
 		for i := 0; i < first.ModelType.NumField(); i++ {
 			f := first.ModelType.Field(i)
 			if f.PkgPath != "" || f.Tag.Get(sqlstruct.TagName) == "-" {
 				continue
 			}
+			tag := f.Tag.Get(sqlstruct.TagName)
+			if tag == "" {
+				tag = sqlstruct.ToSnakeCase(f.Name)
+			}
+			if _, ok := columns[tag]; !ok {
+				continue
+			}
 			args = append(args, val.Field(i).Interface())
 		}
+		args = append(args, stmt.Args()...)
 
 		r, err := db.ExecContext(ctx, sqlStmt, args...)
 		if err != nil {

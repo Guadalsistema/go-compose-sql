@@ -28,6 +28,12 @@ func writeClause(clause SqlClause, argPosition int, placeholders placeholderRend
 	case ClauseSelect:
 		cols := strings.Join(clause.ColumnNames, ", ")
 		return fmt.Sprintf("SELECT %s FROM %s", cols, clause.TableName), 0, nil
+	case ClauseUpdate:
+		assignments := make([]string, len(clause.ColumnNames))
+		for i, col := range clause.ColumnNames {
+			assignments[i] = fmt.Sprintf("%s=%s", col, placeholders.Placeholder(argPosition+i))
+		}
+		return fmt.Sprintf("UPDATE %s SET %s", clause.TableName, strings.Join(assignments, ", ")), len(assignments), nil
 	case ClauseDelete:
 		return fmt.Sprintf("DELETE FROM %s", clause.TableName), 0, nil
 	case ClauseWhere:

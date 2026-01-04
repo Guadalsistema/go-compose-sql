@@ -408,3 +408,39 @@ func TestPostgresDriverPlaceholders(t *testing.T) {
 		t.Fatalf("expected %q, got %q", expected, got)
 	}
 }
+
+func TestUpdate(t *testing.T) {
+	type User struct {
+		ID        int `db:"id"`
+		FirstName string
+		LastName  string `db:"last_name"`
+	}
+
+	stmt := Update[User](nil).Where("id=?", 1)
+	expected := "UPDATE user SET id=?, first_name=?, last_name=? WHERE id=?;"
+	got, err := stmt.Write()
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if got != expected {
+		t.Fatalf("unexpected SQL: %s", got)
+	}
+}
+
+func TestUpdateWithFieldsOpt(t *testing.T) {
+	type User struct {
+		ID        int `db:"id"`
+		FirstName string
+		LastName  string `db:"last_name"`
+	}
+
+	stmt := Update[User](&SqlOpts{Fields: []string{"first_name"}}).Where("id=?", 1)
+	expected := "UPDATE user SET first_name=? WHERE id=?;"
+	got, err := stmt.Write()
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if got != expected {
+		t.Fatalf("unexpected SQL with fields opt: %s", got)
+	}
+}
