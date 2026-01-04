@@ -3,6 +3,7 @@ package sqlcompose
 import (
 	"context"
 	"errors"
+	"reflect"
 	"regexp"
 	"testing"
 
@@ -303,5 +304,25 @@ func TestExecUpdateWithFieldsOpt(t *testing.T) {
 
 	if err := mock.ExpectationsWereMet(); err != nil {
 		t.Fatalf("unmet expectations: %v", err)
+	}
+}
+
+func TestExecJoinQueryReturnsError(t *testing.T) {
+	type User struct{ ID int }
+	stmt := SQLStatement{
+		Clauses: []SqlClause{
+			{Type: ClauseSelect, TableName: "user", ColumnNames: []string{"id"}, ModelType: reflect.TypeOf(User{})},
+			{Type: ClauseJoin, JoinStatement: Select[User](nil), Identifier: "u", Expr: "u.id = user.id"},
+		},
+	}
+
+	db, _, err := sqlmock.New()
+	if err != nil {
+		t.Fatalf("sqlmock.New: %v", err)
+	}
+	defer db.Close()
+
+	if _, err := Exec(db, stmt, User{ID: 1}); err == nil {
+		t.Fatalf("expected error for Exec with SELECT clause")
 	}
 }

@@ -409,6 +409,86 @@ func TestPostgresDriverPlaceholders(t *testing.T) {
 	}
 }
 
+func TestJoinSelect(t *testing.T) {
+	type User struct {
+		ID   int    `db:"id"`
+		Name string `db:"name"`
+	}
+	type Order struct {
+		ID     int    `db:"id"`
+		UserID int    `db:"user_id"`
+		Status string `db:"status"`
+	}
+
+	orders := Select[Order](nil).Where("status=?", "open")
+	stmt := Select[User](nil).
+		Join(orders, "o", "o.user_id = user.id AND o.status = ?", "open").
+		Where("user.id=?", 10)
+
+	expected := "SELECT id, name FROM user JOIN (SELECT id, user_id, status FROM order WHERE status=?) o ON o.user_id = user.id AND o.status = ? WHERE user.id=?;"
+	got, err := stmt.Write()
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if got != expected {
+		t.Fatalf("unexpected SQL: %s", got)
+	}
+	args := stmt.Args()
+	if len(args) != 3 || args[0] != "open" || args[1] != "open" || args[2] != 10 {
+		t.Fatalf("unexpected args: %v", args)
+	}
+}
+
+func TestJoinPostgresPlaceholders(t *testing.T) {
+	type User struct {
+		ID   int    `db:"id"`
+		Name string `db:"name"`
+	}
+	type Order struct {
+		ID     int    `db:"id"`
+		UserID int    `db:"user_id"`
+		Status string `db:"status"`
+	}
+
+	orders := Select[Order](&SqlOpts{Driver: PostgresDriver{}}).Where("status=?", "open")
+	stmt := Select[User](&SqlOpts{Driver: PostgresDriver{}}).
+		Join(orders, "o", "o.user_id = user.id AND o.status = ?", "open").
+		Where("user.id=?", 10)
+
+	expected := "SELECT id, name FROM user JOIN (SELECT id, user_id, status FROM order WHERE status=$1) o ON o.user_id = user.id AND o.status = $2 WHERE user.id=$3"
+	got, err := stmt.Write()
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if got != expected {
+		t.Fatalf("unexpected SQL: %s", got)
+	}
+	args := stmt.Args()
+	if len(args) != 3 || args[0] != "open" || args[1] != "open" || args[2] != 10 {
+		t.Fatalf("unexpected args: %v", args)
+	}
+}
+
+func TestJoinMisplaced(t *testing.T) {
+	type User struct{ ID int }
+	type Order struct{ ID int }
+
+	stmt := Select[User](nil).Where("id=?", 1)
+	stmt.Clauses = append(stmt.Clauses, SqlClause{Type: ClauseJoin, JoinStatement: Select[Order](nil), Identifier: "o", Expr: "o.id = user.id"})
+
+	if _, err := stmt.Write(); err == nil {
+		t.Fatalf("expected error for misplaced JOIN")
+	} else {
+		var clauseErr *ErrMisplacedClause
+		if !errors.As(err, &clauseErr) {
+			t.Fatalf("expected ErrMisplacedClause, got %v", err)
+		}
+		if clauseErr.Clause != string(ClauseJoin) {
+			t.Fatalf("unexpected clause: %s", clauseErr.Clause)
+		}
+	}
+}
+
 func TestUpdate(t *testing.T) {
 	type User struct {
 		ID        int `db:"id"`

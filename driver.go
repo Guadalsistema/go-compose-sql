@@ -16,6 +16,15 @@ type placeholderRenderer interface {
 	Placeholder(int) string
 }
 
+func rendererForDriver(driver Driver) placeholderRenderer {
+	switch driver.(type) {
+	case PostgresDriver, *PostgresDriver:
+		return dollarPlaceholder{}
+	default:
+		return questionPlaceholder{}
+	}
+}
+
 func writeClause(clause SqlClause, argPosition int, placeholders placeholderRenderer) (string, int, error) {
 	switch clause.Type {
 	case ClauseInsert:

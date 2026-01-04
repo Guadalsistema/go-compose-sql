@@ -14,6 +14,7 @@ const (
 	ClauseUpdate    ClauseType = "UPDATE"
 	ClauseDelete    ClauseType = "DELETE"
 	ClauseWhere     ClauseType = "WHERE"
+	ClauseJoin      ClauseType = "JOIN"
 	ClauseOrderBy   ClauseType = "ORDER BY"
 	ClauseLimit     ClauseType = "LIMIT"
 	ClauseOffset    ClauseType = "OFFSET"
@@ -28,12 +29,14 @@ const (
 // ModelType retains the generic type used when building the clause so that
 // values can later be mapped to columns when executing the statement.
 type SqlClause struct {
-	Type        ClauseType
-	TableName   string
-	ColumnNames []string
-	ModelType   reflect.Type
-	Expr        string
-	Args        []any
+	Type          ClauseType
+	TableName     string
+	ColumnNames   []string
+	Identifier    string
+	JoinStatement SQLStatement
+	ModelType     reflect.Type
+	Expr          string
+	Args          []any
 }
 
 // Write renders an individual SQL clause to a string.
