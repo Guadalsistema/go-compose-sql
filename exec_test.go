@@ -421,3 +421,69 @@ func TestExecWithValuesMultiple(t *testing.T) {
 		t.Fatalf("unmet expectations: %v", err)
 	}
 }
+
+func TestExecWithValuesStruct(t *testing.T) {
+	type User struct {
+		ID   int    `db:"id"`
+		Name string `db:"name"`
+	}
+
+	user := User{ID: 42, Name: "Alice"}
+	stmt := Insert[User](nil).Values(user)
+
+	db, mock, err := sqlmock.New()
+	if err != nil {
+		t.Fatalf("sqlmock.New: %v", err)
+	}
+	defer db.Close()
+
+	sqlStr, err := stmt.Write()
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	mock.ExpectExec(regexp.QuoteMeta(sqlStr)).
+		WithArgs(42, "Alice").
+		WillReturnResult(sqlmock.NewResult(1, 1))
+
+	if _, err := Exec(db, stmt); err != nil {
+		t.Fatalf("Exec returned error: %v", err)
+	}
+
+	if err := mock.ExpectationsWereMet(); err != nil {
+		t.Fatalf("unmet expectations: %v", err)
+	}
+}
+
+func TestExecUpdateWithValuesStruct(t *testing.T) {
+	type User struct {
+		ID   int    `db:"id"`
+		Name string `db:"name"`
+	}
+
+	user := User{ID: 1, Name: "Updated Name"}
+	stmt := Update[User](nil).Values(user).Where("id=?", 1)
+
+	db, mock, err := sqlmock.New()
+	if err != nil {
+		t.Fatalf("sqlmock.New: %v", err)
+	}
+	defer db.Close()
+
+	sqlStr, err := stmt.Write()
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	mock.ExpectExec(regexp.QuoteMeta(sqlStr)).
+		WithArgs(1, "Updated Name", 1).
+		WillReturnResult(sqlmock.NewResult(1, 1))
+
+	if _, err := Exec(db, stmt); err != nil {
+		t.Fatalf("Exec returned error: %v", err)
+	}
+
+	if err := mock.ExpectationsWereMet(); err != nil {
+		t.Fatalf("unmet expectations: %v", err)
+	}
+}

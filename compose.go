@@ -110,11 +110,70 @@ func (s SQLStatement) Returning(columns ...string) SQLStatement {
 	return s
 }
 
-// Values appends a VALUES clause to INSERT statements with explicit values.
-// This allows specifying values directly instead of extracting them from a struct.
+// Values appends a VALUES clause to INSERT or UPDATE statements with explicit values.
+// This allows specifying values directly instead of passing models to Exec.
+//
+// If the first argument is a struct matching the statement's ModelType, its field
+// values are automatically extracted in the same order as the clause's ColumnNames.
+// Otherwise, all arguments are used as-is.
 func (s SQLStatement) Values(values ...any) SQLStatement {
+	if len(values) == 0 {
+		s.Clauses = append(s.Clauses, SqlClause{Type: ClauseValues, Args: values})
+		return s
+	}
+
+	// Check if we have a first clause with a ModelType
+	if len(s.Clauses) == 0 {
+		s.Clauses = append(s.Clauses, SqlClause{Type: ClauseValues, Args: values})
+		return s
+	}
+
+	first := s.Clauses[0]
+	if first.ModelType == nil {
+		s.Clauses = append(s.Clauses, SqlClause{Type: ClauseValues, Args: values})
+		return s
+	}
+
+	// Check if first value is a struct matching the ModelType
+	val := reflect.ValueOf(values[0])
+	for val.Kind() == reflect.Pointer {
+		val = val.Elem()
+	}
+
+	if val.IsValid() && val.Type() == first.ModelType && len(values) == 1 {
+		// Extract field values from the struct in the order of ColumnNames
+		extractedValues := extractFieldValues(val, first.ModelType, first.ColumnNames)
+		s.Clauses = append(s.Clauses, SqlClause{Type: ClauseValues, Args: extractedValues})
+		return s
+	}
+
+	// Otherwise, use values as-is
 	s.Clauses = append(s.Clauses, SqlClause{Type: ClauseValues, Args: values})
 	return s
+}
+
+func extractFieldValues(val reflect.Value, typ reflect.Type, columnNames []string) []any {
+	columns := make(map[string]struct{}, len(columnNames))
+	for _, c := range columnNames {
+		columns[c] = struct{}{}
+	}
+
+	args := make([]any, 0, len(columns))
+	for i := 0; i < typ.NumField(); i++ {
+		f := typ.Field(i)
+		if f.PkgPath != "" || f.Tag.Get(sqlstruct.TagName) == "-" {
+			continue
+		}
+		tag := f.Tag.Get(sqlstruct.TagName)
+		if tag == "" {
+			tag = sqlstruct.ToSnakeCase(f.Name)
+		}
+		if _, ok := columns[tag]; !ok {
+			continue
+		}
+		args = append(args, val.Field(i).Interface())
+	}
+	return args
 }
 
 // Asc appends an ASC clause ensuring it follows an ORDER BY clause.
@@ -216,6 +275,14 @@ func Insert[T any](opts *SqlOpts) SQLStatement {
 	tableName := getTableName(sqlstruct.ToSnakeCase(typ.Name()), opts)
 
 	var names []string
+	var fieldFilter map[string]struct{}
+	if opts != nil && len(opts.Fields) > 0 {
+		fieldFilter = make(map[string]struct{}, len(opts.Fields))
+		for _, f := range opts.Fields {
+			fieldFilter[f] = struct{}{}
+		}
+	}
+
 	for i := 0; i < typ.NumField(); i++ {
 		f := typ.Field(i)
 		// Skip unexported fields
@@ -228,6 +295,11 @@ func Insert[T any](opts *SqlOpts) SQLStatement {
 		}
 		if tag == "" {
 			tag = sqlstruct.ToSnakeCase(f.Name)
+		}
+		if fieldFilter != nil {
+			if _, ok := fieldFilter[tag]; !ok {
+				continue
+			}
 		}
 		names = append(names, tag)
 	}
@@ -338,28 +410,38 @@ func renderClauses(stmt SQLStatement, driver Driver, renderer placeholderRendere
 			}
 		}
 		if c.Type == ClauseValues {
-			if i == 0 || stmt.Clauses[i-1].Type != ClauseInsert {
+			if i == 0 {
 				return "", 0, NewErrMisplacedClause(string(c.Type))
 			}
-			insertClause := parts[len(parts)-1]
-			idx := strings.Index(insertClause, " VALUES ")
-			if idx == -1 {
-				return "", 0, fmt.Errorf("sqlcompose: malformed INSERT clause")
+			prevType := stmt.Clauses[i-1].Type
+			if prevType == ClauseInsert {
+				insertClause := parts[len(parts)-1]
+				idx := strings.Index(insertClause, " VALUES ")
+				if idx == -1 {
+					return "", 0, fmt.Errorf("sqlcompose: malformed INSERT clause")
+				}
+				// The INSERT clause already consumed placeholders for its columns,
+				// but we're replacing those with the VALUES clause placeholders.
+				// We need to start from the position before the INSERT consumed them.
+				insertColumns := len(stmt.Clauses[i-1].ColumnNames)
+				valuesStartPos := argPosition - insertColumns
+				placeholdersList := make([]string, len(c.Args))
+				for j := range placeholdersList {
+					placeholdersList[j] = renderer.Placeholder(valuesStartPos + j)
+				}
+				parts[len(parts)-1] = insertClause[:idx] + fmt.Sprintf(" VALUES (%s)", strings.Join(placeholdersList, ", "))
+				// Adjust the position and total: we're replacing insertColumns placeholders with len(c.Args) placeholders
+				argPosition = argPosition - insertColumns + len(placeholdersList)
+				usedTotal = usedTotal - insertColumns + len(placeholdersList)
+				continue
+			} else if prevType == ClauseUpdate {
+				// For UPDATE, VALUES provides the values for the SET clause
+				// The UPDATE clause already has placeholders, we just need to ensure
+				// the args are in the right order. The VALUES clause is transparent here.
+				continue
+			} else {
+				return "", 0, NewErrMisplacedClause(string(c.Type))
 			}
-			// The INSERT clause already consumed placeholders for its columns,
-			// but we're replacing those with the VALUES clause placeholders.
-			// We need to start from the position before the INSERT consumed them.
-			insertColumns := len(stmt.Clauses[i-1].ColumnNames)
-			valuesStartPos := argPosition - insertColumns
-			placeholdersList := make([]string, len(c.Args))
-			for j := range placeholdersList {
-				placeholdersList[j] = renderer.Placeholder(valuesStartPos + j)
-			}
-			parts[len(parts)-1] = insertClause[:idx] + fmt.Sprintf(" VALUES (%s)", strings.Join(placeholdersList, ", "))
-			// Adjust the position and total: we're replacing insertColumns placeholders with len(c.Args) placeholders
-			argPosition = argPosition - insertColumns + len(placeholdersList)
-			usedTotal = usedTotal - insertColumns + len(placeholdersList)
-			continue
 		}
 		if c.Type == ClauseJoin {
 			joinSQL, used, err := renderJoinClause(stmt, c, driver, renderer, argPosition, i)

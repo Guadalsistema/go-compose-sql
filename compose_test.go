@@ -608,3 +608,110 @@ func TestValuesRequiresInsert(t *testing.T) {
 		t.Fatalf("expected VALUES clause error, got %s", clauseErr.Clause)
 	}
 }
+
+func TestInsertValuesWithStruct(t *testing.T) {
+	type User struct {
+		ID        int    `db:"id"`
+		FirstName string `db:"first_name"`
+		LastName  string `db:"last_name"`
+	}
+
+	user := User{ID: 42, FirstName: "Alice", LastName: "Smith"}
+	stmt := Insert[User](nil).Values(user)
+	expected := "INSERT INTO user (id, first_name, last_name) VALUES (?, ?, ?);"
+	got, err := stmt.Write()
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if got != expected {
+		t.Fatalf("unexpected SQL: got %s, want %s", got, expected)
+	}
+
+	args := stmt.Args()
+	if len(args) != 3 {
+		t.Fatalf("expected 3 args, got %d", len(args))
+	}
+	if args[0] != 42 || args[1] != "Alice" || args[2] != "Smith" {
+		t.Fatalf("unexpected args: %v", args)
+	}
+}
+
+func TestInsertValuesWithStructPointer(t *testing.T) {
+	type User struct {
+		ID   int    `db:"id"`
+		Name string `db:"name"`
+	}
+
+	user := &User{ID: 99, Name: "Bob"}
+	stmt := Insert[User](nil).Values(user)
+	expected := "INSERT INTO user (id, name) VALUES (?, ?);"
+	got, err := stmt.Write()
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if got != expected {
+		t.Fatalf("unexpected SQL: got %s, want %s", got, expected)
+	}
+
+	args := stmt.Args()
+	if len(args) != 2 {
+		t.Fatalf("expected 2 args, got %d", len(args))
+	}
+	if args[0] != 99 || args[1] != "Bob" {
+		t.Fatalf("unexpected args: %v", args)
+	}
+}
+
+func TestUpdateValuesWithStruct(t *testing.T) {
+	type User struct {
+		ID        int    `db:"id"`
+		FirstName string `db:"first_name"`
+		LastName  string `db:"last_name"`
+	}
+
+	user := User{ID: 1, FirstName: "Jane", LastName: "Doe"}
+	stmt := Update[User](nil).Values(user).Where("id=?", 1)
+	expected := "UPDATE user SET id=?, first_name=?, last_name=? WHERE id=?;"
+	got, err := stmt.Write()
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if got != expected {
+		t.Fatalf("unexpected SQL: got %s, want %s", got, expected)
+	}
+
+	args := stmt.Args()
+	if len(args) != 4 {
+		t.Fatalf("expected 4 args, got %d", len(args))
+	}
+	if args[0] != 1 || args[1] != "Jane" || args[2] != "Doe" || args[3] != 1 {
+		t.Fatalf("unexpected args: %v", args)
+	}
+}
+
+func TestValuesWithStructRespectsFieldsOpt(t *testing.T) {
+	type User struct {
+		ID        int    `db:"id"`
+		FirstName string `db:"first_name"`
+		LastName  string `db:"last_name"`
+	}
+
+	user := User{ID: 1, FirstName: "Alice", LastName: "Smith"}
+	stmt := Insert[User](&SqlOpts{Fields: []string{"first_name", "last_name"}}).Values(user)
+	expected := "INSERT INTO user (first_name, last_name) VALUES (?, ?);"
+	got, err := stmt.Write()
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if got != expected {
+		t.Fatalf("unexpected SQL: got %s, want %s", got, expected)
+	}
+
+	args := stmt.Args()
+	if len(args) != 2 {
+		t.Fatalf("expected 2 args (only selected fields), got %d", len(args))
+	}
+	if args[0] != "Alice" || args[1] != "Smith" {
+		t.Fatalf("unexpected args: %v", args)
+	}
+}
