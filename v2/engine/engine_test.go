@@ -25,6 +25,11 @@ func TestNewEngineFromConnectionURL(t *testing.T) {
 			expectedDrv: &sqlite.SQLiteDialect{},
 		},
 		{
+			name:        "sqlite memory default",
+			url:         "sqlite:///:memory:",
+			expectedDrv: &sqlite.SQLiteDialect{},
+		},
+		{
 			name:        "postgres psycopg2",
 			url:         "postgresql+psycopg2://scott:tiger@localhost:5432/mydatabase",
 			expectedDrv: &postgres.PostgresDialect{},
@@ -32,6 +37,16 @@ func TestNewEngineFromConnectionURL(t *testing.T) {
 		{
 			name:        "postgres pg8000",
 			url:         "postgresql+pg8000://dbuser:kx%40jj5%2Fg@pghost10/appdb",
+			expectedDrv: &postgres.PostgresDialect{},
+		},
+		{
+			name:        "postgres default",
+			url:         "postgresql://dbuser:kx%40jj5%2Fg@pghost10/appdb",
+			expectedDrv: &postgres.PostgresDialect{},
+		},
+		{
+			name:        "postgres default",
+			url:         "postgres://dbuser:kx%40jj5%2Fg@pghost10/appdb",
 			expectedDrv: &postgres.PostgresDialect{},
 		},
 	}
