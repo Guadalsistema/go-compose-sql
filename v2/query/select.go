@@ -296,7 +296,7 @@ func (b *SelectBuilder) Count() (int64, error) {
 
 // replacePlaceholders converts ? placeholders to driver-specific format
 func (b *SelectBuilder) replacePlaceholders(sql string, args []interface{}) string {
-	driver := b.session.Engine().Driver()
+	driver := b.session.Engine().Dialect()
 	position := 1
 	result := ""
 

@@ -1,11 +1,13 @@
 package main
 
 import (
-	"database/sql"
+	"context"
 	"fmt"
 	"log"
+	"log/slog"
 	"time"
 
+	"github.com/guadalsistema/go-compose-sql/v2/engine"
 	"github.com/guadalsistema/go-compose-sql/v2/expr"
 	"github.com/guadalsistema/go-compose-sql/v2/session"
 	"github.com/guadalsistema/go-compose-sql/v2/table"
@@ -39,22 +41,17 @@ var Users = table.NewTable("users", UsersColumns{
 })
 
 func main() {
-	// Open database connection
-	db, err := sql.Open("sqlite3", ":memory:")
+	// Create engine from connection URL (SQLAlchemy style)
+	eng, err := engine.NewEngine("sqlite+pysqlite:///:memory:", engine.EngineConfig{
+		Logger: slog.Default(),
+	})
 	if err != nil {
 		log.Fatal(err)
 	}
-	defer db.Close()
-
-	// Create engine
-	engine := session.NewEngine(db,
-		session.WithDriver(&session.SQLiteDriver{}),
-		session.WithDebug(true),
-	)
-	defer engine.Close()
+	defer eng.Close()
 
 	// Create a session
-	sess := engine.NewSession()
+	sess := session.NewSession(context.Background(), eng)
 	defer sess.Close()
 
 	// Example 1: Simple SELECT with WHERE
@@ -210,8 +207,8 @@ func main() {
 
 	// Example 14: Transaction
 	fmt.Println("=== Example 14: Transaction ===")
-	txSession, err := engine.Begin()
-	if err != nil {
+	txSession := session.NewSession(context.Background(), eng)
+	if err := txSession.Begin(); err != nil {
 		log.Fatal(err)
 	}
 
@@ -232,5 +229,5 @@ func main() {
 	if err != nil {
 		log.Fatal(err)
 	}
-	fmt.Println("Transaction committed successfully\n")
+	fmt.Println("Transaction committed successfully")
 }

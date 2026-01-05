@@ -3,13 +3,14 @@ package query
 import (
 	"database/sql"
 
-	"github.com/guadalsistema/go-compose-sql/v2/session"
+	"github.com/guadalsistema/go-compose-sql/v2/dialect"
+	"github.com/guadalsistema/go-compose-sql/v2/engine"
 	"github.com/guadalsistema/go-compose-sql/v2/table"
 )
 
 // SessionInterface defines the methods required by query builders
 type SessionInterface interface {
-	Engine() *session.Engine
+	Engine() *engine.Engine
 	Exec(query string, args ...interface{}) (sql.Result, error)
 	QueryRow(query string, args ...interface{}) *sql.Row
 	QueryRows(query string, args ...interface{}) (*sql.Rows, error)
@@ -18,13 +19,13 @@ type SessionInterface interface {
 }
 
 // replacePlaceholders converts ? placeholders to driver-specific format
-func replacePlaceholders(sql string, args []interface{}, driver session.Driver) string {
+func replacePlaceholders(sql string, args []interface{}, dialect dialect.Dialect) string {
 	position := 1
 	result := ""
 
 	for _, char := range sql {
 		if char == '?' {
-			result += driver.Placeholder(position)
+			result += dialect.Placeholder(position)
 			position++
 		} else {
 			result += string(char)

@@ -84,7 +84,7 @@ func (b *UpdateBuilder) ToSQL() (string, []interface{}, error) {
 
 	// RETURNING
 	if len(b.returning) > 0 {
-		if !b.session.Engine().Driver().SupportsReturning() {
+		if !b.session.Engine().Dialect().SupportsReturning() {
 			return "", nil, fmt.Errorf("driver does not support RETURNING clause")
 		}
 		sql.WriteString(" RETURNING ")
@@ -101,7 +101,7 @@ func (b *UpdateBuilder) Exec() (interface{}, error) {
 		return nil, err
 	}
 
-	sql = replacePlaceholders(sql, args, b.session.Engine().Driver())
+	sql = replacePlaceholders(sql, args, b.session.Engine().Dialect())
 
 	if len(b.returning) > 0 {
 		// Use QueryRow for RETURNING
@@ -127,7 +127,7 @@ func (b *UpdateBuilder) One(dest interface{}) error {
 		return err
 	}
 
-	sql = replacePlaceholders(sql, args, b.session.Engine().Driver())
+	sql = replacePlaceholders(sql, args, b.session.Engine().Dialect())
 
 	row := b.session.QueryRow(sql, args...)
 
