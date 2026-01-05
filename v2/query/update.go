@@ -9,7 +9,7 @@ import (
 
 // UpdateBuilder builds UPDATE queries
 type UpdateBuilder struct {
-	session    SessionInterface
+	session    ConnectionInterface
 	table      interface{}
 	sets       map[string]interface{} // Column-value pairs to update
 	whereExprs []expr.Expr
@@ -17,7 +17,7 @@ type UpdateBuilder struct {
 }
 
 // NewUpdate creates a new UPDATE builder
-func NewUpdate(session SessionInterface, table interface{}) *UpdateBuilder {
+func NewUpdate(session ConnectionInterface, table interface{}) *UpdateBuilder {
 	return &UpdateBuilder{
 		session: session,
 		table:   table,
@@ -112,7 +112,7 @@ func (b *UpdateBuilder) Exec() (interface{}, error) {
 	}
 
 	// Regular update
-	result, err := b.session.Exec(sql, args...)
+	result, err := b.session.Execute(sql, args...)
 	return result, err
 }
 

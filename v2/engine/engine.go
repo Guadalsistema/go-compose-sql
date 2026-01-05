@@ -1,6 +1,7 @@
 package engine
 
 import (
+	"context"
 	"database/sql"
 	"fmt"
 	"log/slog"
@@ -13,24 +14,25 @@ import (
 	"github.com/guadalsistema/go-compose-sql/v2/dialect/sqlite"
 )
 
-// Engine manages database connections and sessions
+// Engine manages database configuration and connections.
 type Engine struct {
-	db      *sql.DB
 	dialect dialect.Dialect
-	config  EngineConfig
+	config  EngineOpts
+	info    *connectionInfo
 }
 
-// EngineConfig holds engine configuration.
+// EngineOpts holds engine configuration.
 // Logger is optional and can be used by higher layers to trace SQL statements.
-type EngineConfig struct {
-	Logger *slog.Logger
+type EngineOpts struct {
+	Logger     *slog.Logger
+	Autocommit bool
 }
 
 // NewEngine creates a new database engine from a SQLAlchemy-style connection URL,
 // e.g. "sqlite+pysqlite:///:memory:" or "postgresql+psycopg2://user:pass@host/db".
 // It opens the underlying database with sql.Open and selects the dialect driver
 // (placeholder/quoting behaviour) based on the URL scheme.
-func NewEngine(connectionURL string, cfg EngineConfig) (*Engine, error) {
+func NewEngine(connectionURL string, opts EngineOpts) (*Engine, error) {
 	parsed, err := parseConnectionURL(connectionURL)
 	if err != nil {
 		return nil, err
@@ -41,21 +43,11 @@ func NewEngine(connectionURL string, cfg EngineConfig) (*Engine, error) {
 		return nil, err
 	}
 
-	db, err := sql.Open(parsed.sqlDriverName, parsed.dsn)
-	if err != nil {
-		return nil, err
-	}
-
 	return &Engine{
-		db:      db,
 		dialect: dialectDriver,
-		config:  cfg,
+		config:  opts,
+		info:    parsed,
 	}, nil
-}
-
-// DB returns the underlying database connection.
-func (e *Engine) DB() *sql.DB {
-	return e.db
 }
 
 // Dialect returns the configured SQL dialect (placeholder/quoting behaviour).
@@ -68,9 +60,28 @@ func (e *Engine) Logger() *slog.Logger {
 	return e.config.Logger
 }
 
-// Close closes the database connection.
-func (e *Engine) Close() error {
-	return e.db.Close()
+// Autocommit returns whether the engine defaults to autocommit connections.
+func (e *Engine) Autocommit() bool {
+	return e.config.Autocommit
+}
+
+// ConnectionInfo returns the parsed connection information for the engine.
+func (e *Engine) ConnectionInfo() *connectionInfo {
+	return e.info
+}
+
+// Connect creates a new database connection using the engine configuration.
+func (e *Engine) Connect(ctx context.Context) (*Connection, error) {
+	db, err := sql.Open(e.info.sqlDriverName, e.info.dsn)
+	if err != nil {
+		return nil, err
+	}
+
+	return &Connection{
+		engine: e,
+		db:     db,
+		ctx:    ctx,
+	}, nil
 }
 
 type connectionInfo struct {
@@ -78,6 +89,16 @@ type connectionInfo struct {
 	driverHint    string
 	sqlDriverName string
 	dsn           string
+}
+
+// SQLDriverName returns the Go SQL driver name.
+func (c *connectionInfo) SQLDriverName() string {
+	return c.sqlDriverName
+}
+
+// DSN returns the driver-specific DSN.
+func (c *connectionInfo) DSN() string {
+	return c.dsn
 }
 
 func parseConnectionURL(raw string) (*connectionInfo, error) {

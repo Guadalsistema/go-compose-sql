@@ -53,12 +53,16 @@ func TestNewEngineFromConnectionURL(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			eng, err := NewEngine(tt.url, EngineConfig{})
+			eng, err := NewEngine(tt.url, EngineOpts{})
 			if err != nil {
 				t.Fatalf("NewEngine(%q) error = %v", tt.url, err)
 			}
-			if eng.DB() == nil {
-				t.Fatalf("NewEngine(%q) returned nil DB", tt.url)
+			conn, err := eng.Connect(context.Background())
+			if err != nil {
+				t.Fatalf("Connect() error = %v", err)
+			}
+			if conn == nil {
+				t.Fatalf("Connect() returned nil connection")
 			}
 
 			switch tt.expectedDrv.(type) {
@@ -74,7 +78,7 @@ func TestNewEngineFromConnectionURL(t *testing.T) {
 				t.Fatalf("unexpected driver type in test table %T", tt.expectedDrv)
 			}
 
-			if err := eng.Close(); err != nil {
+			if err := conn.Close(); err != nil {
 				t.Fatalf("Close() error = %v", err)
 			}
 		})
