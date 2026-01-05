@@ -9,7 +9,7 @@ import (
 
 // SelectBuilder builds SELECT queries
 type SelectBuilder struct {
-	session    SessionInterface
+	session    ConnectionInterface
 	table      interface{}
 	columns    []string
 	whereExprs []expr.Expr
@@ -36,7 +36,7 @@ type OrderByClause struct {
 }
 
 // NewSelect creates a new SELECT builder
-func NewSelect(session SessionInterface, table interface{}) *SelectBuilder {
+func NewSelect(session ConnectionInterface, table interface{}) *SelectBuilder {
 	return &SelectBuilder{
 		session: session,
 		table:   table,

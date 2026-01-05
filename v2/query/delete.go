@@ -9,14 +9,14 @@ import (
 
 // DeleteBuilder builds DELETE queries
 type DeleteBuilder struct {
-	session    SessionInterface
+	session    ConnectionInterface
 	table      interface{}
 	whereExprs []expr.Expr
 	returning  []string
 }
 
 // NewDelete creates a new DELETE builder
-func NewDelete(session SessionInterface, table interface{}) *DeleteBuilder {
+func NewDelete(session ConnectionInterface, table interface{}) *DeleteBuilder {
 	return &DeleteBuilder{
 		session: session,
 		table:   table,
@@ -91,7 +91,7 @@ func (b *DeleteBuilder) Exec() (interface{}, error) {
 	}
 
 	// Regular delete
-	result, err := b.session.Exec(sql, args...)
+	result, err := b.session.Execute(sql, args...)
 	return result, err
 }
 

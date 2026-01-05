@@ -8,10 +8,10 @@ import (
 	"github.com/guadalsistema/go-compose-sql/v2/table"
 )
 
-// SessionInterface defines the methods required by query builders
-type SessionInterface interface {
+// ConnectionInterface defines the methods required by query builders
+type ConnectionInterface interface {
 	Engine() *engine.Engine
-	Exec(query string, args ...interface{}) (sql.Result, error)
+	Execute(query string, args ...interface{}) (sql.Result, error)
 	QueryRow(query string, args ...interface{}) *sql.Row
 	QueryRows(query string, args ...interface{}) (*sql.Rows, error)
 	GetTableName(tbl interface{}) string

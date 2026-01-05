@@ -7,14 +7,14 @@ import (
 
 // InsertBuilder builds INSERT queries
 type InsertBuilder struct {
-	session   SessionInterface
+	session   ConnectionInterface
 	table     interface{}
 	values    []map[string]interface{} // Column-value pairs for each row
 	returning []string
 }
 
 // NewInsert creates a new INSERT builder
-func NewInsert(session SessionInterface, table interface{}) *InsertBuilder {
+func NewInsert(session ConnectionInterface, table interface{}) *InsertBuilder {
 	return &InsertBuilder{
 		session: session,
 		table:   table,
@@ -120,7 +120,7 @@ func (b *InsertBuilder) Exec() (interface{}, error) {
 	}
 
 	// Regular insert
-	result, err := b.session.Exec(sql, args...)
+	result, err := b.session.Execute(sql, args...)
 	return result, err
 }
 

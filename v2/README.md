@@ -8,7 +8,7 @@ Version 2 of go-compose-sql is a complete rewrite inspired by SQLAlchemy's query
 
 - **Type-safe column expressions** - Define columns with type parameters for compile-time safety
 - **Rich expression language** - Build complex WHERE clauses with `Eq`, `Gt`, `Like`, `In`, `Between`, etc.
-- **Session pattern** - Manage database connections and transactions elegantly
+- **Connection pattern** - Manage database connections and transactions elegantly
 - **Composable queries** - Chain methods to build queries incrementally
 - **Multiple SQL dialects** - Support for PostgreSQL, SQLite, and MySQL
 - **Full SQL feature set** - GROUP BY, HAVING, DISTINCT, JOINs, and more
@@ -20,10 +20,10 @@ Version 2 of go-compose-sql is a complete rewrite inspired by SQLAlchemy's query
 | WHERE clauses | String-based, injection-prone | Type-safe expression language |
 | Table definition | Implicit via generics | Explicit Table objects |
 | Column access | String literals | Typed Column objects |
-| Query building | Statement chaining | Session + builder pattern |
+| Query building | Statement chaining | Connection + builder pattern |
 | GROUP BY/HAVING | Not supported | ✅ Supported |
 | JOIN types | Generic JOIN only | INNER, LEFT, RIGHT, FULL |
-| Transactions | Manual | Session-based with Begin/Commit |
+| Transactions | Manual | Connection-based with Begin/Commit |
 | DISTINCT | Not supported | ✅ Supported |
 
 ## Installation
@@ -60,27 +60,24 @@ var Users = table.NewTable("users", UsersColumns{
 })
 ```
 
-### 2. Create an Engine and Session
+### 2. Create an Engine and Connection
 
 ```go
 import (
-    "database/sql"
-    "github.com/guadalsistema/go-compose-sql/v2/session"
+    "context"
+
+    "github.com/guadalsistema/go-compose-sql/v2/engine"
 )
 
-// Open database
-db, _ := sql.Open("postgres", "your-connection-string")
-
-// Create engine with PostgreSQL driver
-engine := session.NewEngine(db,
-    session.WithDriver(&session.PostgresDriver{}),
-    session.WithDebug(true),
+// Create engine from SQLAlchemy-style URL
+eng, _ := engine.NewEngine(
+    "postgresql+psycopg2://user:pass@localhost:5432/mydatabase",
+    engine.EngineOpts{Autocommit: true},
 )
-defer engine.Close()
 
-// Create session
-sess := engine.NewSession()
-defer sess.Close()
+// Create connection
+conn, _ := eng.Connect(context.Background())
+defer conn.Close()
 ```
 
 ### 3. Build and Execute Queries
@@ -89,12 +86,12 @@ defer sess.Close()
 import "github.com/guadalsistema/go-compose-sql/v2/expr"
 
 // SELECT with WHERE
-query := sess.Query(Users).
+query := conn.Query(Users).
     Where(expr.Eq(Users.C.ID, int64(1)))
 // SQL: SELECT * FROM users WHERE users.id = $1
 
 // Multiple conditions
-query := sess.Query(Users).
+query := conn.Query(Users).
     Where(expr.Gt(Users.C.Age, 18)).
     Where(expr.Like(Users.C.Email, "%@example.com")).
     OrderByDesc("created_at").
@@ -103,7 +100,7 @@ query := sess.Query(Users).
 //      ORDER BY created_at DESC LIMIT 10
 
 // Complex OR conditions
-query := sess.Query(Users).
+query := conn.Query(Users).
     Where(expr.Or(
         expr.Eq(Users.C.Name, "John"),
         expr.Eq(Users.C.Name, "Jane"),
@@ -111,20 +108,20 @@ query := sess.Query(Users).
 // SQL: SELECT * FROM users WHERE ((users.name = $1) OR (users.name = $2))
 
 // INSERT
-result, _ := sess.Insert(Users).
+result, _ := conn.Insert(Users).
     Set("name", "John Doe").
     Set("email", "john@example.com").
     Set("age", 30).
     Exec()
 
 // UPDATE
-result, _ := sess.Update(Users).
+result, _ := conn.Update(Users).
     Set("age", 31).
     Where(expr.Eq(Users.C.ID, int64(1))).
     Exec()
 
 // DELETE
-result, _ := sess.Delete(Users).
+result, _ := conn.Delete(Users).
     Where(expr.Lt(Users.C.Age, 18)).
     Exec()
 ```
@@ -248,8 +245,11 @@ err := sess.Insert(Users).
 
 ```go
 // Begin transaction
-tx, err := engine.Begin()
+tx, err := eng.Connect(context.Background())
 if err != nil {
+    log.Fatal(err)
+}
+if err := tx.Begin(); err != nil {
     log.Fatal(err)
 }
 
@@ -269,8 +269,10 @@ err = tx.Commit()
 ### PostgreSQL
 
 ```go
-engine := session.NewEngine(db,
-    session.WithDriver(&session.PostgresDriver{}))
+eng, _ := engine.NewEngine(
+    "postgresql+psycopg2://user:pass@localhost:5432/mydatabase",
+    engine.EngineOpts{Autocommit: true},
+)
 // Uses $1, $2, ... placeholders
 // Supports RETURNING
 ```
@@ -278,8 +280,10 @@ engine := session.NewEngine(db,
 ### SQLite
 
 ```go
-engine := session.NewEngine(db,
-    session.WithDriver(&session.SQLiteDriver{}))
+eng, _ := engine.NewEngine(
+    "sqlite+pysqlite:///:memory:",
+    engine.EngineOpts{Autocommit: true},
+)
 // Uses ? placeholders
 // Supports RETURNING (SQLite 3.35.0+)
 ```
@@ -287,8 +291,10 @@ engine := session.NewEngine(db,
 ### MySQL
 
 ```go
-engine := session.NewEngine(db,
-    session.WithDriver(&session.MySQLDriver{}))
+eng, _ := engine.NewEngine(
+    "mysql+pymysql://user:pass@localhost:3306/mydatabase",
+    engine.EngineOpts{Autocommit: true},
+)
 // Uses ? placeholders
 // Does not support RETURNING
 ```
@@ -302,7 +308,7 @@ v2/
 ├── table/          # Table and Column definitions
 ├── expr/           # Expression language for WHERE/HAVING
 ├── query/          # Query builders (Select, Insert, Update, Delete)
-├── session/        # Engine, Session, and Driver implementations
+├── engine/         # Engine and Connection implementations
 └── examples/       # Usage examples
 ```
 
@@ -311,7 +317,7 @@ v2/
 1. **Table** - Represents a database table with typed columns
 2. **Column** - Type-safe column definition with metadata
 3. **Expression** - SQL expression (WHERE, HAVING conditions)
-4. **Session** - Database connection/transaction context
+4. **Connection** - Database connection/transaction context
 5. **Builder** - Fluent query construction (Select, Insert, Update, Delete)
 6. **Driver** - SQL dialect abstraction (Postgres, SQLite, MySQL)
 
@@ -321,7 +327,7 @@ The v2 API is a complete rewrite and not backwards compatible with v1. Key migra
 
 1. **Define tables explicitly** instead of using generic type parameters
 2. **Replace string WHERE clauses** with expression language
-3. **Use Session pattern** instead of direct database access
+3. **Use Connection pattern** instead of direct database access
 4. **Update column references** from string literals to Column objects
 
 ### Before (v1)
@@ -344,9 +350,12 @@ var Users = table.NewTable("users", UsersColumns{
     // ...
 })
 
-// Use session
-sess := engine.NewSession()
-query := sess.Query(Users).
+// Use connection
+eng, _ := engine.NewEngine("sqlite+pysqlite:///:memory:", engine.EngineOpts{Autocommit: true})
+conn, _ := eng.Connect(context.Background())
+defer conn.Close()
+
+query := conn.Query(Users).
     Where(expr.Gt(Users.C.Age, 18)).
     OrderBy("name")
 
