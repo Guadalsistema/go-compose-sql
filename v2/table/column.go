@@ -1,6 +1,9 @@
 package table
 
-import "fmt"
+import (
+	"fmt"
+	"reflect"
+)
 
 // Column represents a database column with type safety
 type Column[T any] struct {
@@ -70,6 +73,13 @@ func (c *Column[T]) setParentTable(table interface{}) {
 // Options returns the column options
 func (c *Column[T]) Options() ColumnOptions {
 	return c.options
+}
+
+// Type returns the reflect.Type of this column's Go type
+// This is used by the query builder to determine expected types for scanning
+func (c *Column[T]) Type() reflect.Type {
+	var zero T
+	return reflect.TypeOf(zero)
 }
 
 // Builder methods for column options

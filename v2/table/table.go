@@ -52,6 +52,15 @@ func (t *Table[T]) ColumnNames() []string {
 	return names
 }
 
+// ColumnTypes returns all column types for use in type conversion
+func (t *Table[T]) ColumnTypes() []reflect.Type {
+	types := make([]reflect.Type, len(t.columns))
+	for i, col := range t.columns {
+		types[i] = col.Type
+	}
+	return types
+}
+
 // extractColumns uses reflection to extract column metadata from the struct
 func extractColumns(tableName string, columnStruct interface{}) []*ColumnRef {
 	var columns []*ColumnRef
@@ -116,8 +125,8 @@ func extractColumns(tableName string, columnStruct interface{}) []*ColumnRef {
 				}
 			}
 
-			// Extract the type parameter from Column[T]
-			columnType := extractColumnType(fieldVal.Type())
+			// Extract the type parameter from Column[T] using the Type() method
+			columnType := extractColumnType(fieldVal)
 
 			colRef := &ColumnRef{
 				Name:     columnName,
@@ -134,27 +143,26 @@ func extractColumns(tableName string, columnStruct interface{}) []*ColumnRef {
 }
 
 // extractColumnType extracts the type parameter T from *Column[T]
-func extractColumnType(columnPtrType reflect.Type) reflect.Type {
-	// Remove pointer
-	if columnPtrType.Kind() == reflect.Ptr {
-		columnPtrType = columnPtrType.Elem()
+// by calling the Type() method on the column value
+func extractColumnType(columnValue reflect.Value) reflect.Type {
+	// Call the Type() method on the column
+	typeMethod := columnValue.MethodByName("Type")
+	if !typeMethod.IsValid() {
+		// Fallback to interface{} if Type() method not found
+		return reflect.TypeOf((*interface{})(nil)).Elem()
 	}
 
-	// For generic types, we need to extract the type parameter
-	// Since Go reflection doesn't directly expose type parameters,
-	// we'll use a workaround: get the field type from the struct
-	if columnPtrType.Kind() == reflect.Struct {
-		// This is a simplified approach - in practice, we might need
-		// to store type information differently
-		typeStr := columnPtrType.String()
-		// Extract type from "table.Column[int64]" -> "int64"
-		if idx := strings.Index(typeStr, "["); idx != -1 {
-			typeStr = typeStr[idx+1 : len(typeStr)-1]
-			// This is a placeholder - proper type extraction would require
-			// registering types at column creation time
-		}
+	// Call Type() and get the result
+	typeResults := typeMethod.Call(nil)
+	if len(typeResults) == 0 {
+		return reflect.TypeOf((*interface{})(nil)).Elem()
 	}
 
-	// Return interface{} as fallback
+	// The result should be a reflect.Type
+	if typ, ok := typeResults[0].Interface().(reflect.Type); ok {
+		return typ
+	}
+
+	// Fallback to interface{} if conversion failed
 	return reflect.TypeOf((*interface{})(nil)).Elem()
 }
