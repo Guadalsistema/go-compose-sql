@@ -4,7 +4,6 @@ import (
 	"context"
 	"database/sql"
 
-	"github.com/guadalsistema/go-compose-sql/v2/query"
 	"github.com/guadalsistema/go-compose-sql/v2/table"
 )
 
@@ -94,26 +93,6 @@ func (c *Connection) Context() context.Context {
 // InTransaction returns true if the connection is in a transaction.
 func (c *Connection) InTransaction() bool {
 	return c.tx != nil
-}
-
-// Query creates a new SELECT query builder.
-func (c *Connection) Query(tbl interface{}) *query.SelectBuilder {
-	return query.NewSelect(c, tbl)
-}
-
-// Insert creates a new INSERT query builder.
-func (c *Connection) Insert(tbl interface{}) *query.InsertBuilder {
-	return query.NewInsert(c, tbl)
-}
-
-// Update creates a new UPDATE query builder.
-func (c *Connection) Update(tbl interface{}) *query.UpdateBuilder {
-	return query.NewUpdate(c, tbl)
-}
-
-// Delete creates a new DELETE query builder.
-func (c *Connection) Delete(tbl interface{}) *query.DeleteBuilder {
-	return query.NewDelete(c, tbl)
 }
 
 // GetTableName extracts the table name from a Table[T] object.
