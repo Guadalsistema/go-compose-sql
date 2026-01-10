@@ -1,7 +1,9 @@
 package query
 
 import (
+	"database/sql"
 	"fmt"
+	"reflect"
 	"strings"
 
 	"github.com/guadalsistema/go-compose-sql/v2/expr"
@@ -231,40 +233,158 @@ func (b *SelectBuilder) ToSQL() (string, []interface{}, error) {
 
 // All executes the query and returns all results
 func (b *SelectBuilder) All(dest interface{}) error {
-	sql, args, err := b.ToSQL()
+	sqlStr, args, err := b.ToSQL()
 	if err != nil {
 		return err
 	}
 
 	// Replace placeholders based on driver
-	sql = b.replacePlaceholders(sql, args)
+	sqlStr = b.replacePlaceholders(sqlStr, args)
 
-	rows, err := b.session.QueryRows(sql, args...)
+	rows, err := b.session.QueryRows(sqlStr, args...)
 	if err != nil {
 		return err
 	}
 	defer rows.Close()
 
-	// TODO: Scan rows into dest using reflection/sqlstruct
-	// This is a placeholder - actual implementation would scan into dest
-	return nil
+	// Get column types from database
+	columnTypes, err := rows.ColumnTypes()
+	if err != nil {
+		return fmt.Errorf("failed to get column types: %w", err)
+	}
+
+	// Get expected types from table definition
+	expectedTypes, err := b.getExpectedTypes()
+	if err != nil {
+		return fmt.Errorf("failed to get expected types: %w", err)
+	}
+
+	// Ensure we have the same number of expected types as columns
+	if len(expectedTypes) != len(columnTypes) {
+		return fmt.Errorf("column count mismatch: expected %d, got %d", len(expectedTypes), len(columnTypes))
+	}
+
+	// Get type registry from dialect
+	registry := b.session.Engine().Dialect().TypeRegistry()
+
+	// Prepare destination slice
+	destValue := reflect.ValueOf(dest)
+	if destValue.Kind() != reflect.Ptr || destValue.Elem().Kind() != reflect.Slice {
+		return fmt.Errorf("dest must be pointer to slice")
+	}
+	sliceValue := destValue.Elem()
+	elemType := sliceValue.Type().Elem()
+
+	// Scan all rows
+	for rows.Next() {
+		// Create scan targets with conversion support
+		scanTargets := CreateScanTargets(columnTypes, expectedTypes, registry)
+
+		// Scan the row
+		err := rows.Scan(scanTargets...)
+		if err != nil {
+			return fmt.Errorf("failed to scan row: %w", err)
+		}
+
+		// Extract values from scanners
+		values := ExtractValues(scanTargets)
+
+		// Create new struct and populate fields
+		newElem := reflect.New(elemType).Elem()
+		for i, value := range values {
+			if i >= newElem.NumField() {
+				break
+			}
+			field := newElem.Field(i)
+			if field.CanSet() {
+				valueReflect := reflect.ValueOf(value)
+				if valueReflect.Type().AssignableTo(field.Type()) {
+					field.Set(valueReflect)
+				}
+			}
+		}
+
+		// Append to slice
+		sliceValue.Set(reflect.Append(sliceValue, newElem))
+	}
+
+	return rows.Err()
 }
 
 // One executes the query and returns a single result
 func (b *SelectBuilder) One(dest interface{}) error {
-	sql, args, err := b.ToSQL()
+	sqlStr, args, err := b.ToSQL()
 	if err != nil {
 		return err
 	}
 
 	// Replace placeholders based on driver
-	sql = b.replacePlaceholders(sql, args)
+	sqlStr = b.replacePlaceholders(sqlStr, args)
 
-	row := b.session.QueryRow(sql, args...)
+	// Use QueryRows instead of QueryRow to get column types
+	rows, err := b.session.QueryRows(sqlStr, args...)
+	if err != nil {
+		return err
+	}
+	defer rows.Close()
 
-	// TODO: Scan row into dest using reflection/sqlstruct
-	// This is a placeholder - actual implementation would scan into dest
-	_ = row
+	// Check if there's a row
+	if !rows.Next() {
+		return sql.ErrNoRows
+	}
+
+	// Get column types from database
+	columnTypes, err := rows.ColumnTypes()
+	if err != nil {
+		return fmt.Errorf("failed to get column types: %w", err)
+	}
+
+	// Get expected types from table definition
+	expectedTypes, err := b.getExpectedTypes()
+	if err != nil {
+		return fmt.Errorf("failed to get expected types: %w", err)
+	}
+
+	// Ensure we have the same number of expected types as columns
+	if len(expectedTypes) != len(columnTypes) {
+		return fmt.Errorf("column count mismatch: expected %d, got %d", len(expectedTypes), len(columnTypes))
+	}
+
+	// Get type registry from dialect
+	registry := b.session.Engine().Dialect().TypeRegistry()
+
+	// Create scan targets with conversion support
+	scanTargets := CreateScanTargets(columnTypes, expectedTypes, registry)
+
+	// Scan the row
+	err = rows.Scan(scanTargets...)
+	if err != nil {
+		return fmt.Errorf("failed to scan row: %w", err)
+	}
+
+	// Extract values from scanners
+	values := ExtractValues(scanTargets)
+
+	// Populate dest struct
+	destValue := reflect.ValueOf(dest)
+	if destValue.Kind() != reflect.Ptr {
+		return fmt.Errorf("dest must be a pointer")
+	}
+	destValue = destValue.Elem()
+
+	for i, value := range values {
+		if i >= destValue.NumField() {
+			break
+		}
+		field := destValue.Field(i)
+		if field.CanSet() {
+			valueReflect := reflect.ValueOf(value)
+			if valueReflect.Type().AssignableTo(field.Type()) {
+				field.Set(valueReflect)
+			}
+		}
+	}
+
 	return nil
 }
 
@@ -310,4 +430,28 @@ func (b *SelectBuilder) replacePlaceholders(sql string, args []interface{}) stri
 	}
 
 	return result
+}
+
+// getExpectedTypes extracts expected column types from the table definition
+func (b *SelectBuilder) getExpectedTypes() ([]reflect.Type, error) {
+	// Try to get column types from table using reflection
+	tableValue := reflect.ValueOf(b.table)
+
+	// Call ColumnTypes() method if available
+	columnTypesMethod := tableValue.MethodByName("ColumnTypes")
+	if !columnTypesMethod.IsValid() {
+		return nil, fmt.Errorf("table does not have ColumnTypes() method")
+	}
+
+	results := columnTypesMethod.Call(nil)
+	if len(results) == 0 {
+		return nil, fmt.Errorf("ColumnTypes() returned no results")
+	}
+
+	// Convert result to []reflect.Type
+	if types, ok := results[0].Interface().([]reflect.Type); ok {
+		return types, nil
+	}
+
+	return nil, fmt.Errorf("ColumnTypes() did not return []reflect.Type")
 }
