@@ -3,6 +3,7 @@ package query
 import (
 	"fmt"
 	"strings"
+	"time"
 )
 
 // InsertBuilder builds INSERT queries
@@ -48,6 +49,9 @@ func (b *InsertBuilder) ToSQL() (string, []interface{}, error) {
 	if len(b.values) == 0 {
 		return "", nil, fmt.Errorf("no values to insert")
 	}
+
+	// Inject automatic timestamps
+	b.injectTimestamps()
 
 	var sql strings.Builder
 	var args []interface{}
@@ -142,4 +146,32 @@ func (b *InsertBuilder) One(dest interface{}) error {
 	// TODO: Scan row into dest using reflection/sqlstruct
 	_ = row
 	return nil
+}
+
+// injectTimestamps automatically adds timestamp values for columns marked with timestamp options
+func (b *InsertBuilder) injectTimestamps() {
+	if len(b.values) == 0 {
+		return
+	}
+
+	// Get table columns to check for timestamp options
+	columns := b.session.GetTableColumns(b.table)
+	if columns == nil {
+		return
+	}
+
+	now := time.Now()
+
+	// Check each column for timestamp options
+	for _, col := range columns {
+		// Auto-set created_at and updated_at on INSERT
+		if col.Options.CreatedAtTimestamp {
+			// Only set if not already explicitly set by user
+			for _, row := range b.values {
+				if _, exists := row[col.Name]; !exists {
+					row[col.Name] = now
+				}
+			}
+		}
+	}
 }

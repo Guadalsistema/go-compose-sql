@@ -3,6 +3,7 @@ package query
 import (
 	"fmt"
 	"strings"
+	"time"
 
 	"github.com/guadalsistema/go-compose-sql/v2/expr"
 )
@@ -48,6 +49,9 @@ func (b *UpdateBuilder) ToSQL() (string, []interface{}, error) {
 	if len(b.sets) == 0 {
 		return "", nil, fmt.Errorf("no columns to update")
 	}
+
+	// Inject automatic timestamps
+	b.updateTimestamps()
 
 	var sql strings.Builder
 	var args []interface{}
@@ -134,4 +138,25 @@ func (b *UpdateBuilder) One(dest interface{}) error {
 	// TODO: Scan row into dest using reflection/sqlstruct
 	_ = row
 	return nil
+}
+
+// updateTimestamps automatically updates timestamp values for columns marked with UpdatedAtTimestamp
+func (b *UpdateBuilder) updateTimestamps() {
+	// Get table columns to check for timestamp options
+	columns := b.session.GetTableColumns(b.table)
+	if columns == nil {
+		return
+	}
+
+	now := time.Now()
+
+	// Check each column for UpdatedAtTimestamp option
+	for _, col := range columns {
+		if col.Options.UpdatedAtTimestamp {
+			// Only set if not already explicitly set by user
+			if _, exists := b.sets[col.Name]; !exists {
+				b.sets[col.Name] = now
+			}
+		}
+	}
 }

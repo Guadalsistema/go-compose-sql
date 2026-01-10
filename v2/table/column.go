@@ -12,12 +12,15 @@ type Column[T any] struct {
 
 // ColumnOptions holds column metadata
 type ColumnOptions struct {
-	PrimaryKey bool
-	NotNull    bool
-	Unique     bool
-	AutoIncr   bool
-	DefaultVal interface{}
-	ForeignKey *ForeignKeyRef
+	PrimaryKey             bool
+	NotNull                bool
+	Unique                 bool
+	AutoIncr               bool
+	DefaultVal             interface{}
+	ForeignKey             *ForeignKeyRef
+	CreatedAtTimestamp     bool // Automatically set timestamp on INSERT
+	UpdatedAtTimestamp     bool // Automatically update timestamp on UPDATE
+	DefaultCurrentTimestamp bool // Use database CURRENT_TIMESTAMP as default
 }
 
 // ForeignKeyRef represents a foreign key relationship
@@ -110,5 +113,26 @@ func (c *Column[T]) ForeignKey(table, column string) *Column[T] {
 		Table:  table,
 		Column: column,
 	}
+	return c
+}
+
+// CreatedAtTimestamp marks this column to be automatically set to current timestamp on INSERT
+func (c *Column[T]) CreatedAtTimestamp() *Column[T] {
+	c.options.CreatedAtTimestamp = true
+	c.options.NotNull = true // created_at should typically be NOT NULL
+	return c
+}
+
+// UpdatedAtTimestamp marks this column to be automatically updated to current timestamp on UPDATE
+func (c *Column[T]) UpdatedAtTimestamp() *Column[T] {
+	c.options.UpdatedAtTimestamp = true
+	c.options.CreatedAtTimestamp = true // updated_at should also be set on INSERT
+	c.options.NotNull = true // updated_at should typically be NOT NULL
+	return c
+}
+
+// CurrentTimestamp sets the database default value to CURRENT_TIMESTAMP
+func (c *Column[T]) CurrentTimestamp() *Column[T] {
+	c.options.DefaultCurrentTimestamp = true
 	return c
 }
