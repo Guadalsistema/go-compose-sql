@@ -2,7 +2,6 @@ package table
 
 import (
 	"reflect"
-	"strings"
 )
 
 // Table represents a database table with typed columns
