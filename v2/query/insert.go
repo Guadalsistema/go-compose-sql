@@ -1,6 +1,8 @@
 package query
 
 import (
+	"context"
+	"database/sql"
 	"fmt"
 	"strings"
 )
@@ -11,6 +13,7 @@ type InsertBuilder struct {
 	table     interface{}
 	values    []map[string]interface{} // Column-value pairs for each row
 	returning []string
+	err       error
 }
 
 // NewInsert creates a new INSERT builder
@@ -23,8 +26,16 @@ func NewInsert(session ConnectionInterface, table interface{}) *InsertBuilder {
 
 // Values adds values to insert (can be called multiple times for batch insert)
 func (b *InsertBuilder) Values(data interface{}) *InsertBuilder {
-	// TODO: Use reflection to extract column-value pairs from struct
-	// For now, this is a placeholder
+	if b.err != nil {
+		return b
+	}
+
+	rows, err := normalizeInsertValues(data, b.session.GetTableColumns(b.table))
+	if err != nil {
+		b.err = err
+		return b
+	}
+	b.values = append(b.values, rows...)
 	return b
 }
 
@@ -45,6 +56,9 @@ func (b *InsertBuilder) Returning(columns ...string) *InsertBuilder {
 
 // ToSQL generates the SQL query and arguments
 func (b *InsertBuilder) ToSQL() (string, []interface{}, error) {
+	if b.err != nil {
+		return "", nil, b.err
+	}
 	if len(b.values) == 0 {
 		return "", nil, fmt.Errorf("no values to insert")
 	}
@@ -61,9 +75,9 @@ func (b *InsertBuilder) ToSQL() (string, []interface{}, error) {
 	sql.WriteString(tableName)
 
 	// Get column names from first row
-	var columns []string
-	for col := range b.values[0] {
-		columns = append(columns, col)
+	columns := orderedInsertColumns(b.values[0], b.session.GetTableColumns(b.table))
+	if len(columns) == 0 {
+		return "", nil, fmt.Errorf("no insertable columns found")
 	}
 
 	// (column1, column2, ...)
@@ -85,7 +99,12 @@ func (b *InsertBuilder) ToSQL() (string, []interface{}, error) {
 				sql.WriteString(", ")
 			}
 			sql.WriteString("?")
-			args = append(args, row[col])
+			val, ok := row[col]
+			if ok {
+				args = append(args, val)
+			} else {
+				args = append(args, nil)
+			}
 		}
 		sql.WriteString(")")
 	}
@@ -103,31 +122,36 @@ func (b *InsertBuilder) ToSQL() (string, []interface{}, error) {
 }
 
 // Exec executes the INSERT and returns the result
-func (b *InsertBuilder) Exec() (interface{}, error) {
+func (b *InsertBuilder) Exec(ctx context.Context) (sql.Result, error) {
+	if len(b.returning) > 0 {
+		return nil, fmt.Errorf("Exec cannot be used with RETURNING clause")
+	}
+	ctx = b.resolveContext(ctx)
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
+
 	sql, args, err := b.ToSQL()
 	if err != nil {
 		return nil, err
 	}
 
-	sql = replacePlaceholders(sql, args, b.session.Engine().Dialect())
-
-	if len(b.returning) > 0 {
-		// Use QueryRow for RETURNING
-		row := b.session.QueryRow(sql, args...)
-		// TODO: Scan the returned values
-		_ = row
-		return nil, nil
-	}
+	rawSQL := sql
+	sql = FormatPlaceholders(sql, b.session.Engine().Dialect())
+	logSQLTransform(b.session.Engine().Logger(), rawSQL, sql, args)
 
 	// Regular insert
-	result, err := b.session.Execute(sql, args...)
-	return result, err
+	return b.session.ExecuteContext(ctx, sql, args...)
 }
 
 // One executes the INSERT with RETURNING and scans into dest
-func (b *InsertBuilder) One(dest interface{}) error {
+func (b *InsertBuilder) One(ctx context.Context, dest interface{}) error {
 	if len(b.returning) == 0 {
 		return fmt.Errorf("RETURNING clause required for One()")
+	}
+	ctx = b.resolveContext(ctx)
+	if err := ctx.Err(); err != nil {
+		return err
 	}
 
 	sql, args, err := b.ToSQL()
@@ -135,11 +159,22 @@ func (b *InsertBuilder) One(dest interface{}) error {
 		return err
 	}
 
-	sql = replacePlaceholders(sql, args, b.session.Engine().Dialect())
+	rawSQL := sql
+	sql = FormatPlaceholders(sql, b.session.Engine().Dialect())
+	logSQLTransform(b.session.Engine().Logger(), rawSQL, sql, args)
 
-	row := b.session.QueryRow(sql, args...)
+	rows, err := b.session.QueryRowsContext(ctx, sql, args...)
+	if err != nil {
+		return err
+	}
+	defer rows.Close()
 
-	// TODO: Scan row into dest using reflection/sqlstruct
-	_ = row
-	return nil
+	return scanOne(rows, dest)
+}
+
+func (b *InsertBuilder) resolveContext(ctx context.Context) context.Context {
+	if ctx == nil {
+		return b.session.Context()
+	}
+	return ctx
 }

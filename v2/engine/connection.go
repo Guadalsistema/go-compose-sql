@@ -29,29 +29,39 @@ func (c *Connection) Begin() error {
 	return nil
 }
 
-// Execute runs a SQL statement and returns the result.
-func (c *Connection) Execute(query string, args ...interface{}) (sql.Result, error) {
-	if c.tx != nil {
-		return c.tx.ExecContext(c.ctx, query, args...)
+// ExecuteContext runs a SQL statement with the provided context.
+func (c *Connection) ExecuteContext(ctx context.Context, query string, args ...interface{}) (sql.Result, error) {
+	if ctx == nil {
+		ctx = c.ctx
 	}
-	return c.db.ExecContext(c.ctx, query, args...)
+	if c.tx != nil {
+		return c.tx.ExecContext(ctx, query, args...)
+	}
+	return c.db.ExecContext(ctx, query, args...)
 }
 
-// QueryRow executes a query that returns a single row.
-func (c *Connection) QueryRow(query string, args ...interface{}) *sql.Row {
-	if c.tx != nil {
-		return c.tx.QueryRowContext(c.ctx, query, args...)
+// QueryRowContext executes a query that returns a single row with the provided context.
+func (c *Connection) QueryRowContext(ctx context.Context, query string, args ...interface{}) *sql.Row {
+	if ctx == nil {
+		ctx = c.ctx
 	}
-	return c.db.QueryRowContext(c.ctx, query, args...)
+	if c.tx != nil {
+		return c.tx.QueryRowContext(ctx, query, args...)
+	}
+	return c.db.QueryRowContext(ctx, query, args...)
 }
 
-// QueryRows executes a query that returns multiple rows.
-func (c *Connection) QueryRows(query string, args ...interface{}) (*sql.Rows, error) {
-	if c.tx != nil {
-		return c.tx.QueryContext(c.ctx, query, args...)
+// QueryRowsContext executes a query that returns multiple rows with the provided context.
+func (c *Connection) QueryRowsContext(ctx context.Context, query string, args ...interface{}) (*sql.Rows, error) {
+	if ctx == nil {
+		ctx = c.ctx
 	}
-	return c.db.QueryContext(c.ctx, query, args...)
+	if c.tx != nil {
+		return c.tx.QueryContext(ctx, query, args...)
+	}
+	return c.db.QueryContext(ctx, query, args...)
 }
+
 
 // Commit commits the transaction.
 func (c *Connection) Commit() error {

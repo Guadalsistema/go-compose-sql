@@ -18,7 +18,7 @@ import (
 type Engine struct {
 	dialect dialect.Dialect
 	config  EngineOpts
-	info    *connectionInfo
+	info    *connectionInfo // TODO check if  dialect is needed really, currently is part of info
 }
 
 // EngineOpts holds engine configuration.
@@ -26,6 +26,7 @@ type Engine struct {
 type EngineOpts struct {
 	Logger     *slog.Logger
 	Autocommit bool
+	Ping       bool // TODO implment ping when connect if driver support it
 }
 
 // NewEngine creates a new database engine from a SQLAlchemy-style connection URL,

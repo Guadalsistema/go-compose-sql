@@ -1,6 +1,8 @@
 package query
 
 import (
+	"context"
+	"database/sql"
 	"fmt"
 	"strings"
 
@@ -74,31 +76,36 @@ func (b *DeleteBuilder) ToSQL() (string, []interface{}, error) {
 }
 
 // Exec executes the DELETE and returns the result
-func (b *DeleteBuilder) Exec() (interface{}, error) {
+func (b *DeleteBuilder) Exec(ctx context.Context) (sql.Result, error) {
+	if len(b.returning) > 0 {
+		return nil, fmt.Errorf("Exec cannot be used with RETURNING clause")
+	}
+	ctx = b.resolveContext(ctx)
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
+
 	sql, args, err := b.ToSQL()
 	if err != nil {
 		return nil, err
 	}
 
-	sql = replacePlaceholders(sql, args, b.session.Engine().Dialect())
-
-	if len(b.returning) > 0 {
-		// Use QueryRow for RETURNING
-		row := b.session.QueryRow(sql, args...)
-		// TODO: Scan the returned values
-		_ = row
-		return nil, nil
-	}
+	rawSQL := sql
+	sql = FormatPlaceholders(sql, b.session.Engine().Dialect())
+	logSQLTransform(b.session.Engine().Logger(), rawSQL, sql, args)
 
 	// Regular delete
-	result, err := b.session.Execute(sql, args...)
-	return result, err
+	return b.session.ExecuteContext(ctx, sql, args...)
 }
 
 // All executes the DELETE with RETURNING and returns all deleted rows
-func (b *DeleteBuilder) All(dest interface{}) error {
+func (b *DeleteBuilder) All(ctx context.Context, dest interface{}) error {
 	if len(b.returning) == 0 {
 		return fmt.Errorf("RETURNING clause required for All()")
+	}
+	ctx = b.resolveContext(ctx)
+	if err := ctx.Err(); err != nil {
+		return err
 	}
 
 	sql, args, err := b.ToSQL()
@@ -106,15 +113,22 @@ func (b *DeleteBuilder) All(dest interface{}) error {
 		return err
 	}
 
-	sql = replacePlaceholders(sql, args, b.session.Engine().Dialect())
+	rawSQL := sql
+	sql = FormatPlaceholders(sql, b.session.Engine().Dialect())
+	logSQLTransform(b.session.Engine().Logger(), rawSQL, sql, args)
 
-	rows, err := b.session.QueryRows(sql, args...)
+	rows, err := b.session.QueryRowsContext(ctx, sql, args...)
 	if err != nil {
 		return err
 	}
 	defer rows.Close()
 
-	// TODO: Scan rows into dest using reflection/sqlstruct
-	_ = rows
-	return nil
+	return scanAll(rows, dest)
+}
+
+func (b *DeleteBuilder) resolveContext(ctx context.Context) context.Context {
+	if ctx == nil {
+		return b.session.Context()
+	}
+	return ctx
 }

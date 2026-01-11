@@ -1,6 +1,8 @@
 package query
 
 import (
+	"context"
+	"database/sql"
 	"fmt"
 	"strings"
 
@@ -230,46 +232,62 @@ func (b *SelectBuilder) ToSQL() (string, []interface{}, error) {
 }
 
 // All executes the query and returns all results
-func (b *SelectBuilder) All(dest interface{}) error {
+func (b *SelectBuilder) All(ctx context.Context, dest interface{}) error {
+	ctx = b.resolveContext(ctx)
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+
 	sql, args, err := b.ToSQL()
 	if err != nil {
 		return err
 	}
 
-	// Replace placeholders based on driver
-	sql = b.replacePlaceholders(sql, args)
+	rawSQL := sql
+	sql = FormatPlaceholders(sql, b.session.Engine().Dialect())
+	logSQLTransform(b.session.Engine().Logger(), rawSQL, sql, args)
 
-	rows, err := b.session.QueryRows(sql, args...)
+	rows, err := b.session.QueryRowsContext(ctx, sql, args...)
 	if err != nil {
 		return err
 	}
 	defer rows.Close()
 
-	// TODO: Scan rows into dest using reflection/sqlstruct
-	// This is a placeholder - actual implementation would scan into dest
-	return nil
+	return scanAll(rows, dest)
 }
 
 // One executes the query and returns a single result
-func (b *SelectBuilder) One(dest interface{}) error {
+func (b *SelectBuilder) One(ctx context.Context, dest interface{}) error {
+	ctx = b.resolveContext(ctx)
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+
 	sql, args, err := b.ToSQL()
 	if err != nil {
 		return err
 	}
 
-	// Replace placeholders based on driver
-	sql = b.replacePlaceholders(sql, args)
+	rawSQL := sql
+	sql = FormatPlaceholders(sql, b.session.Engine().Dialect())
+	logSQLTransform(b.session.Engine().Logger(), rawSQL, sql, args)
 
-	row := b.session.QueryRow(sql, args...)
+	rows, err := b.session.QueryRowsContext(ctx, sql, args...)
+	if err != nil {
+		return err
+	}
+	defer rows.Close()
 
-	// TODO: Scan row into dest using reflection/sqlstruct
-	// This is a placeholder - actual implementation would scan into dest
-	_ = row
-	return nil
+	return scanOne(rows, dest)
 }
 
 // Count returns the count of matching rows
-func (b *SelectBuilder) Count() (int64, error) {
+func (b *SelectBuilder) Count(ctx context.Context) (int64, error) {
+	ctx = b.resolveContext(ctx)
+	if err := ctx.Err(); err != nil {
+		return 0, err
+	}
+
 	// Create a copy of the builder with COUNT(*)
 	countBuilder := &SelectBuilder{
 		session:    b.session,
@@ -286,28 +304,36 @@ func (b *SelectBuilder) Count() (int64, error) {
 		return 0, err
 	}
 
-	sql = b.replacePlaceholders(sql, args)
+	rawSQL := sql
+	sql = FormatPlaceholders(sql, b.session.Engine().Dialect())
+	logSQLTransform(b.session.Engine().Logger(), rawSQL, sql, args)
 
-	var count int64
-	row := b.session.QueryRow(sql, args...)
-	err = row.Scan(&count)
-	return count, err
-}
+	rows, err := b.session.QueryRowsContext(ctx, sql, args...)
+	if err != nil {
+		return 0, err
+	}
+	defer rows.Close()
 
-// replacePlaceholders converts ? placeholders to driver-specific format
-func (b *SelectBuilder) replacePlaceholders(sql string, args []interface{}) string {
-	driver := b.session.Engine().Dialect()
-	position := 1
-	result := ""
-
-	for _, char := range sql {
-		if char == '?' {
-			result += driver.Placeholder(position)
-			position++
-		} else {
-			result += string(char)
+	if !rows.Next() {
+		if err := rows.Err(); err != nil {
+			return 0, err
 		}
+		return 0, sql.ErrNoRows
 	}
 
-	return result
+	var count int64
+	if err := rows.Scan(&count); err != nil {
+		return 0, err
+	}
+	if rows.Next() {
+		return 0, fmt.Errorf("expected exactly one row")
+	}
+	return count, rows.Err()
+}
+
+func (b *SelectBuilder) resolveContext(ctx context.Context) context.Context {
+	if ctx == nil {
+		return b.session.Context()
+	}
+	return ctx
 }

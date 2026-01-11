@@ -85,6 +85,8 @@ defer conn.Close()
 ```go
 import "github.com/guadalsistema/go-compose-sql/v2/expr"
 
+ctx := context.Background()
+
 // SELECT with WHERE
 query := conn.Query(Users).
     Where(expr.Eq(Users.C.ID, int64(1)))
@@ -112,18 +114,18 @@ result, _ := conn.Insert(Users).
     Set("name", "John Doe").
     Set("email", "john@example.com").
     Set("age", 30).
-    Exec()
+    Exec(ctx)
 
 // UPDATE
 result, _ := conn.Update(Users).
     Set("age", 31).
     Where(expr.Eq(Users.C.ID, int64(1))).
-    Exec()
+    Exec(ctx)
 
 // DELETE
 result, _ := conn.Delete(Users).
     Where(expr.Lt(Users.C.Age, 18)).
-    Exec()
+    Exec(ctx)
 ```
 
 ## Expression Language
@@ -236,7 +238,7 @@ err := sess.Insert(Users).
     Set("name", "John").
     Set("email", "john@example.com").
     Returning("id", "created_at").
-    One(&user)
+    One(context.Background(), &user)
 // SQL: INSERT INTO users (name, email) VALUES ($1, $2)
 //      RETURNING id, created_at
 ```
@@ -254,7 +256,7 @@ if err := tx.Begin(); err != nil {
 }
 
 // Perform operations
-_, err = tx.Insert(Users).Set("name", "John").Exec()
+_, err = tx.Insert(Users).Set("name", "John").Exec(context.Background())
 if err != nil {
     tx.Rollback()
     return err
@@ -360,7 +362,7 @@ query := conn.Query(Users).
     OrderBy("name")
 
 var users []User
-query.All(&users)
+query.All(context.Background(), &users)
 ```
 
 ## Roadmap
