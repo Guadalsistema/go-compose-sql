@@ -1,4 +1,4 @@
-package query
+package builder
 
 import (
 	"context"
@@ -30,9 +30,6 @@ type ConnectionInterface interface {
 
 	// QueryRowsContext executes a query that returns multiple rows
 	QueryRowsContext(ctx context.Context, query string, args ...interface{}) (*sql.Rows, error)
-
-	// GetTableName extracts the table name from a table object
-	GetTableName(tbl interface{}) string
 
 	// GetTableColumns extracts column references from a table object
 	GetTableColumns(tbl interface{}) []*table.ColumnRef

@@ -26,7 +26,7 @@ type Engine struct {
 type EngineOpts struct {
 	Logger     *slog.Logger
 	Autocommit bool
-	Ping       bool // TODO implment ping when connect if driver support it
+	Ping       bool // TODO implement ping when connect if driver support it
 }
 
 // NewEngine creates a new database engine from a SQLAlchemy-style connection URL,

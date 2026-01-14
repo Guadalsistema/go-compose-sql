@@ -1,26 +1,28 @@
-package query
+package builder
 
 import (
 	"context"
 	"database/sql"
 	"fmt"
 	"strings"
+
+	"github.com/guadalsistema/go-compose-sql/v2/table"
 )
 
 // InsertBuilder builds INSERT queries
 type InsertBuilder struct {
-	session   ConnectionInterface
-	table     interface{}
+	conn      ConnectionInterface
+	table     table.TableInterface
 	values    []map[string]interface{} // Column-value pairs for each row
 	returning []string
 	err       error
 }
 
 // NewInsert creates a new INSERT builder
-func NewInsert(session ConnectionInterface, table interface{}) *InsertBuilder {
+func NewInsert(conn ConnectionInterface, tbl table.TableInterface) *InsertBuilder {
 	return &InsertBuilder{
-		session: session,
-		table:   table,
+		conn:  conn,
+		table: tbl,
 	}
 }
 
@@ -30,7 +32,7 @@ func (b *InsertBuilder) Values(data interface{}) *InsertBuilder {
 		return b
 	}
 
-	rows, err := normalizeInsertValues(data, b.session.GetTableColumns(b.table))
+	rows, err := normalizeInsertValues(data, b.table.Columns())
 	if err != nil {
 		b.err = err
 		return b
@@ -67,7 +69,7 @@ func (b *InsertBuilder) ToSQL() (string, []interface{}, error) {
 	var args []interface{}
 
 	// INSERT INTO table_name
-	tableName := b.session.GetTableName(b.table)
+	tableName := b.table.Name()
 	if tableName == "" {
 		return "", nil, fmt.Errorf("invalid table")
 	}
@@ -75,7 +77,7 @@ func (b *InsertBuilder) ToSQL() (string, []interface{}, error) {
 	sql.WriteString(tableName)
 
 	// Get column names from first row
-	columns := orderedInsertColumns(b.values[0], b.session.GetTableColumns(b.table))
+	columns := orderedInsertColumns(b.values[0], b.table.Columns())
 	if len(columns) == 0 {
 		return "", nil, fmt.Errorf("no insertable columns found")
 	}
@@ -111,7 +113,7 @@ func (b *InsertBuilder) ToSQL() (string, []interface{}, error) {
 
 	// RETURNING
 	if len(b.returning) > 0 {
-		if !b.session.Engine().Dialect().SupportsReturning() {
+		if !b.conn.Dialect().SupportsReturning() {
 			return "", nil, fmt.Errorf("driver does not support RETURNING clause")
 		}
 		sql.WriteString(" RETURNING ")
@@ -131,17 +133,17 @@ func (b *InsertBuilder) Exec(ctx context.Context) (sql.Result, error) {
 		return nil, err
 	}
 
-	sql, args, err := b.ToSQL()
+	sqlStr, args, err := b.ToSQL()
 	if err != nil {
 		return nil, err
 	}
 
-	rawSQL := sql
-	sql = FormatPlaceholders(sql, b.session.Engine().Dialect())
-	logSQLTransform(b.session.Engine().Logger(), rawSQL, sql, args)
+	rawSQL := sqlStr
+	sqlStr = FormatPlaceholders(sqlStr, b.conn.Dialect())
+	logSQLTransform(b.conn.Logger(), rawSQL, sqlStr, args)
 
 	// Regular insert
-	return b.session.ExecuteContext(ctx, sql, args...)
+	return b.conn.ExecuteContext(ctx, sqlStr, args...)
 }
 
 // One executes the INSERT with RETURNING and scans into dest
@@ -154,16 +156,16 @@ func (b *InsertBuilder) One(ctx context.Context, dest interface{}) error {
 		return err
 	}
 
-	sql, args, err := b.ToSQL()
+	sqlStr, args, err := b.ToSQL()
 	if err != nil {
 		return err
 	}
 
-	rawSQL := sql
-	sql = FormatPlaceholders(sql, b.session.Engine().Dialect())
-	logSQLTransform(b.session.Engine().Logger(), rawSQL, sql, args)
+	rawSQL := sqlStr
+	sqlStr = FormatPlaceholders(sqlStr, b.conn.Dialect())
+	logSQLTransform(b.conn.Logger(), rawSQL, sqlStr, args)
 
-	rows, err := b.session.QueryRowsContext(ctx, sql, args...)
+	rows, err := b.conn.QueryRowsContext(ctx, sqlStr, args...)
 	if err != nil {
 		return err
 	}
@@ -174,7 +176,7 @@ func (b *InsertBuilder) One(ctx context.Context, dest interface{}) error {
 
 func (b *InsertBuilder) resolveContext(ctx context.Context) context.Context {
 	if ctx == nil {
-		return b.session.Context()
+		return b.conn.Context()
 	}
 	return ctx
 }

@@ -1,4 +1,4 @@
-package query
+package builder
 
 import (
 	"context"
@@ -7,23 +7,24 @@ import (
 	"strings"
 
 	"github.com/guadalsistema/go-compose-sql/v2/expr"
+	"github.com/guadalsistema/go-compose-sql/v2/table"
 )
 
 // UpdateBuilder builds UPDATE queries
 type UpdateBuilder struct {
-	session    ConnectionInterface
-	table      interface{}
+	conn       ConnectionInterface
+	table      table.TableInterface
 	sets       map[string]interface{} // Column-value pairs to update
 	whereExprs []expr.Expr
 	returning  []string
 }
 
 // NewUpdate creates a new UPDATE builder
-func NewUpdate(session ConnectionInterface, table interface{}) *UpdateBuilder {
+func NewUpdate(conn ConnectionInterface, tbl table.TableInterface) *UpdateBuilder {
 	return &UpdateBuilder{
-		session: session,
-		table:   table,
-		sets:    make(map[string]interface{}),
+		conn:  conn,
+		table: tbl,
+		sets:  make(map[string]interface{}),
 	}
 }
 
@@ -55,7 +56,7 @@ func (b *UpdateBuilder) ToSQL() (string, []interface{}, error) {
 	var args []interface{}
 
 	// UPDATE table_name
-	tableName := b.session.GetTableName(b.table)
+	tableName := b.table.Name()
 	if tableName == "" {
 		return "", nil, fmt.Errorf("invalid table")
 	}
@@ -86,7 +87,7 @@ func (b *UpdateBuilder) ToSQL() (string, []interface{}, error) {
 
 	// RETURNING
 	if len(b.returning) > 0 {
-		if !b.session.Engine().Dialect().SupportsReturning() {
+		if !b.conn.Dialect().SupportsReturning() {
 			return "", nil, fmt.Errorf("driver does not support RETURNING clause")
 		}
 		sql.WriteString(" RETURNING ")
@@ -106,17 +107,17 @@ func (b *UpdateBuilder) Exec(ctx context.Context) (sql.Result, error) {
 		return nil, err
 	}
 
-	sql, args, err := b.ToSQL()
+	sqlStr, args, err := b.ToSQL()
 	if err != nil {
 		return nil, err
 	}
 
-	rawSQL := sql
-	sql = FormatPlaceholders(sql, b.session.Engine().Dialect())
-	logSQLTransform(b.session.Engine().Logger(), rawSQL, sql, args)
+	rawSQL := sqlStr
+	sqlStr = FormatPlaceholders(sqlStr, b.conn.Dialect())
+	logSQLTransform(b.conn.Logger(), rawSQL, sqlStr, args)
 
 	// Regular update
-	return b.session.ExecuteContext(ctx, sql, args...)
+	return b.conn.ExecuteContext(ctx, sqlStr, args...)
 }
 
 // One executes the UPDATE with RETURNING and scans into dest
@@ -129,16 +130,16 @@ func (b *UpdateBuilder) One(ctx context.Context, dest interface{}) error {
 		return err
 	}
 
-	sql, args, err := b.ToSQL()
+	sqlStr, args, err := b.ToSQL()
 	if err != nil {
 		return err
 	}
 
-	rawSQL := sql
-	sql = FormatPlaceholders(sql, b.session.Engine().Dialect())
-	logSQLTransform(b.session.Engine().Logger(), rawSQL, sql, args)
+	rawSQL := sqlStr
+	sqlStr = FormatPlaceholders(sqlStr, b.conn.Dialect())
+	logSQLTransform(b.conn.Logger(), rawSQL, sqlStr, args)
 
-	rows, err := b.session.QueryRowsContext(ctx, sql, args...)
+	rows, err := b.conn.QueryRowsContext(ctx, sqlStr, args...)
 	if err != nil {
 		return err
 	}
@@ -149,7 +150,7 @@ func (b *UpdateBuilder) One(ctx context.Context, dest interface{}) error {
 
 func (b *UpdateBuilder) resolveContext(ctx context.Context) context.Context {
 	if ctx == nil {
-		return b.session.Context()
+		return b.conn.Context()
 	}
 	return ctx
 }

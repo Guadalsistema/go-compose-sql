@@ -3,8 +3,10 @@ package engine
 import (
 	"context"
 	"database/sql"
+	"log/slog"
 
-	"github.com/guadalsistema/go-compose-sql/v2/query"
+	"github.com/guadalsistema/go-compose-sql/v2/builder"
+	"github.com/guadalsistema/go-compose-sql/v2/dialect"
 	"github.com/guadalsistema/go-compose-sql/v2/table"
 )
 
@@ -96,6 +98,16 @@ func (c *Connection) Engine() *Engine {
 	return c.engine
 }
 
+// Dialect returns the SQL dialect for this connection.
+func (c *Connection) Dialect() dialect.Dialect {
+	return c.engine.Dialect()
+}
+
+// Logger returns the configured logger for this connection.
+func (c *Connection) Logger() *slog.Logger {
+	return c.engine.Logger()
+}
+
 // Context returns the connection context.
 func (c *Connection) Context() context.Context {
 	return c.ctx
@@ -107,31 +119,23 @@ func (c *Connection) InTransaction() bool {
 }
 
 // Query creates a new SELECT query builder.
-func (c *Connection) Query(tbl interface{}) *query.SelectBuilder {
-	return query.NewSelect(c, tbl)
+func (c *Connection) Query(tbl table.TableInterface) *builder.SelectBuilder {
+	return builder.NewSelect(c, tbl)
 }
 
 // Insert creates a new INSERT query builder.
-func (c *Connection) Insert(tbl interface{}) *query.InsertBuilder {
-	return query.NewInsert(c, tbl)
+func (c *Connection) Insert(tbl table.TableInterface) *builder.InsertBuilder {
+	return builder.NewInsert(c, tbl)
 }
 
 // Update creates a new UPDATE query builder.
-func (c *Connection) Update(tbl interface{}) *query.UpdateBuilder {
-	return query.NewUpdate(c, tbl)
+func (c *Connection) Update(tbl table.TableInterface) *builder.UpdateBuilder {
+	return builder.NewUpdate(c, tbl)
 }
 
 // Delete creates a new DELETE query builder.
-func (c *Connection) Delete(tbl interface{}) *query.DeleteBuilder {
-	return query.NewDelete(c, tbl)
-}
-
-// GetTableName extracts the table name from a Table[T] object.
-func (c *Connection) GetTableName(tbl interface{}) string {
-	if t, ok := tbl.(interface{ Name() string }); ok {
-		return t.Name()
-	}
-	return ""
+func (c *Connection) Delete(tbl table.TableInterface) *builder.DeleteBuilder {
+	return builder.NewDelete(c, tbl)
 }
 
 // GetTableColumns extracts column references from a Table[T] object.

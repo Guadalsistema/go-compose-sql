@@ -1,4 +1,4 @@
-package query
+package builder
 
 import (
 	"context"
@@ -7,21 +7,22 @@ import (
 	"strings"
 
 	"github.com/guadalsistema/go-compose-sql/v2/expr"
+	"github.com/guadalsistema/go-compose-sql/v2/table"
 )
 
 // DeleteBuilder builds DELETE queries
 type DeleteBuilder struct {
-	session    ConnectionInterface
-	table      interface{}
+	conn       ConnectionInterface
+	table      table.TableInterface
 	whereExprs []expr.Expr
 	returning  []string
 }
 
 // NewDelete creates a new DELETE builder
-func NewDelete(session ConnectionInterface, table interface{}) *DeleteBuilder {
+func NewDelete(conn ConnectionInterface, tbl table.TableInterface) *DeleteBuilder {
 	return &DeleteBuilder{
-		session: session,
-		table:   table,
+		conn:  conn,
+		table: tbl,
 	}
 }
 
@@ -43,7 +44,7 @@ func (b *DeleteBuilder) ToSQL() (string, []interface{}, error) {
 	var args []interface{}
 
 	// DELETE FROM table_name
-	tableName := b.session.GetTableName(b.table)
+	tableName := b.table.Name()
 	if tableName == "" {
 		return "", nil, fmt.Errorf("invalid table")
 	}
@@ -65,7 +66,7 @@ func (b *DeleteBuilder) ToSQL() (string, []interface{}, error) {
 
 	// RETURNING
 	if len(b.returning) > 0 {
-		if !b.session.Engine().Dialect().SupportsReturning() {
+		if !b.conn.Dialect().SupportsReturning() {
 			return "", nil, fmt.Errorf("driver does not support RETURNING clause")
 		}
 		sql.WriteString(" RETURNING ")
@@ -85,17 +86,17 @@ func (b *DeleteBuilder) Exec(ctx context.Context) (sql.Result, error) {
 		return nil, err
 	}
 
-	sql, args, err := b.ToSQL()
+	sqlStr, args, err := b.ToSQL()
 	if err != nil {
 		return nil, err
 	}
 
-	rawSQL := sql
-	sql = FormatPlaceholders(sql, b.session.Engine().Dialect())
-	logSQLTransform(b.session.Engine().Logger(), rawSQL, sql, args)
+	rawSQL := sqlStr
+	sqlStr = FormatPlaceholders(sqlStr, b.conn.Dialect())
+	logSQLTransform(b.conn.Logger(), rawSQL, sqlStr, args)
 
 	// Regular delete
-	return b.session.ExecuteContext(ctx, sql, args...)
+	return b.conn.ExecuteContext(ctx, sqlStr, args...)
 }
 
 // All executes the DELETE with RETURNING and returns all deleted rows
@@ -108,16 +109,16 @@ func (b *DeleteBuilder) All(ctx context.Context, dest interface{}) error {
 		return err
 	}
 
-	sql, args, err := b.ToSQL()
+	sqlStr, args, err := b.ToSQL()
 	if err != nil {
 		return err
 	}
 
-	rawSQL := sql
-	sql = FormatPlaceholders(sql, b.session.Engine().Dialect())
-	logSQLTransform(b.session.Engine().Logger(), rawSQL, sql, args)
+	rawSQL := sqlStr
+	sqlStr = FormatPlaceholders(sqlStr, b.conn.Dialect())
+	logSQLTransform(b.conn.Logger(), rawSQL, sqlStr, args)
 
-	rows, err := b.session.QueryRowsContext(ctx, sql, args...)
+	rows, err := b.conn.QueryRowsContext(ctx, sqlStr, args...)
 	if err != nil {
 		return err
 	}
@@ -128,7 +129,7 @@ func (b *DeleteBuilder) All(ctx context.Context, dest interface{}) error {
 
 func (b *DeleteBuilder) resolveContext(ctx context.Context) context.Context {
 	if ctx == nil {
-		return b.session.Context()
+		return b.conn.Context()
 	}
 	return ctx
 }

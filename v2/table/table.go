@@ -5,6 +5,13 @@ import (
 	"strings"
 )
 
+// TableInterface is the interface that all table types must implement.
+// It provides the table name for use in SQL queries.
+type TableInterface interface {
+	Name() string
+	Columns() []*ColumnRef
+}
+
 // Table represents a database table with typed columns
 type Table[T any] struct {
 	name    string

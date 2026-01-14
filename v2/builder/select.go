@@ -1,18 +1,18 @@
-package query
+package builder
 
 import (
 	"context"
-	"database/sql"
 	"fmt"
 	"strings"
 
 	"github.com/guadalsistema/go-compose-sql/v2/expr"
+	"github.com/guadalsistema/go-compose-sql/v2/table"
 )
 
 // SelectBuilder builds SELECT queries
 type SelectBuilder struct {
-	session    ConnectionInterface
-	table      interface{}
+	conn       ConnectionInterface
+	table      table.TableInterface
 	columns    []string
 	whereExprs []expr.Expr
 	joins      []*JoinClause
@@ -27,7 +27,7 @@ type SelectBuilder struct {
 // JoinClause represents a JOIN operation
 type JoinClause struct {
 	Type      string // "INNER", "LEFT", "RIGHT", "FULL"
-	Table     interface{}
+	Table     table.TableInterface
 	Condition expr.Expr
 }
 
@@ -38,10 +38,10 @@ type OrderByClause struct {
 }
 
 // NewSelect creates a new SELECT builder
-func NewSelect(session ConnectionInterface, table interface{}) *SelectBuilder {
+func NewSelect(conn ConnectionInterface, tbl table.TableInterface) *SelectBuilder {
 	return &SelectBuilder{
-		session: session,
-		table:   table,
+		conn:  conn,
+		table: tbl,
 	}
 }
 
@@ -58,30 +58,30 @@ func (b *SelectBuilder) Where(condition expr.Expr) *SelectBuilder {
 }
 
 // Join adds an INNER JOIN
-func (b *SelectBuilder) Join(table interface{}, condition expr.Expr) *SelectBuilder {
+func (b *SelectBuilder) Join(tbl table.TableInterface, condition expr.Expr) *SelectBuilder {
 	b.joins = append(b.joins, &JoinClause{
 		Type:      "INNER JOIN",
-		Table:     table,
+		Table:     tbl,
 		Condition: condition,
 	})
 	return b
 }
 
 // LeftJoin adds a LEFT JOIN
-func (b *SelectBuilder) LeftJoin(table interface{}, condition expr.Expr) *SelectBuilder {
+func (b *SelectBuilder) LeftJoin(tbl table.TableInterface, condition expr.Expr) *SelectBuilder {
 	b.joins = append(b.joins, &JoinClause{
 		Type:      "LEFT JOIN",
-		Table:     table,
+		Table:     tbl,
 		Condition: condition,
 	})
 	return b
 }
 
 // RightJoin adds a RIGHT JOIN
-func (b *SelectBuilder) RightJoin(table interface{}, condition expr.Expr) *SelectBuilder {
+func (b *SelectBuilder) RightJoin(tbl table.TableInterface, condition expr.Expr) *SelectBuilder {
 	b.joins = append(b.joins, &JoinClause{
 		Type:      "RIGHT JOIN",
-		Table:     table,
+		Table:     tbl,
 		Condition: condition,
 	})
 	return b
@@ -155,7 +155,7 @@ func (b *SelectBuilder) ToSQL() (string, []interface{}, error) {
 	}
 
 	// FROM
-	tableName := b.session.GetTableName(b.table)
+	tableName := b.table.Name()
 	if tableName == "" {
 		return "", nil, fmt.Errorf("invalid table")
 	}
@@ -164,7 +164,7 @@ func (b *SelectBuilder) ToSQL() (string, []interface{}, error) {
 
 	// JOINs
 	for _, join := range b.joins {
-		joinTableName := b.session.GetTableName(join.Table)
+		joinTableName := join.Table.Name()
 		sql.WriteString(" ")
 		sql.WriteString(join.Type)
 		sql.WriteString(" ")
@@ -238,16 +238,16 @@ func (b *SelectBuilder) All(ctx context.Context, dest interface{}) error {
 		return err
 	}
 
-	sql, args, err := b.ToSQL()
+	sqlStr, args, err := b.ToSQL()
 	if err != nil {
 		return err
 	}
 
-	rawSQL := sql
-	sql = FormatPlaceholders(sql, b.session.Engine().Dialect())
-	logSQLTransform(b.session.Engine().Logger(), rawSQL, sql, args)
+	rawSQL := sqlStr
+	sqlStr = FormatPlaceholders(sqlStr, b.conn.Dialect())
+	logSQLTransform(b.conn.Logger(), rawSQL, sqlStr, args)
 
-	rows, err := b.session.QueryRowsContext(ctx, sql, args...)
+	rows, err := b.conn.QueryRowsContext(ctx, sqlStr, args...)
 	if err != nil {
 		return err
 	}
@@ -263,16 +263,16 @@ func (b *SelectBuilder) One(ctx context.Context, dest interface{}) error {
 		return err
 	}
 
-	sql, args, err := b.ToSQL()
+	sqlStr, args, err := b.ToSQL()
 	if err != nil {
 		return err
 	}
 
-	rawSQL := sql
-	sql = FormatPlaceholders(sql, b.session.Engine().Dialect())
-	logSQLTransform(b.session.Engine().Logger(), rawSQL, sql, args)
+	rawSQL := sqlStr
+	sqlStr = FormatPlaceholders(sqlStr, b.conn.Dialect())
+	logSQLTransform(b.conn.Logger(), rawSQL, sqlStr, args)
 
-	rows, err := b.session.QueryRowsContext(ctx, sql, args...)
+	rows, err := b.conn.QueryRowsContext(ctx, sqlStr, args...)
 	if err != nil {
 		return err
 	}
@@ -290,7 +290,7 @@ func (b *SelectBuilder) Count(ctx context.Context) (int64, error) {
 
 	// Create a copy of the builder with COUNT(*)
 	countBuilder := &SelectBuilder{
-		session:    b.session,
+		conn:       b.conn,
 		table:      b.table,
 		columns:    []string{"COUNT(*) as count"},
 		whereExprs: b.whereExprs,
@@ -299,16 +299,16 @@ func (b *SelectBuilder) Count(ctx context.Context) (int64, error) {
 		having:     b.having,
 	}
 
-	sql, args, err := countBuilder.ToSQL()
+	sqlStr, args, err := countBuilder.ToSQL()
 	if err != nil {
 		return 0, err
 	}
 
-	rawSQL := sql
-	sql = FormatPlaceholders(sql, b.session.Engine().Dialect())
-	logSQLTransform(b.session.Engine().Logger(), rawSQL, sql, args)
+	rawSQL := sqlStr
+	sqlStr = FormatPlaceholders(sqlStr, b.conn.Dialect())
+	logSQLTransform(b.conn.Logger(), rawSQL, sqlStr, args)
 
-	rows, err := b.session.QueryRowsContext(ctx, sql, args...)
+	rows, err := b.conn.QueryRowsContext(ctx, sqlStr, args...)
 	if err != nil {
 		return 0, err
 	}
@@ -318,7 +318,7 @@ func (b *SelectBuilder) Count(ctx context.Context) (int64, error) {
 		if err := rows.Err(); err != nil {
 			return 0, err
 		}
-		return 0, sql.ErrNoRows
+		return 0, fmt.Errorf("no rows")
 	}
 
 	var count int64
@@ -333,7 +333,7 @@ func (b *SelectBuilder) Count(ctx context.Context) (int64, error) {
 
 func (b *SelectBuilder) resolveContext(ctx context.Context) context.Context {
 	if ctx == nil {
-		return b.session.Context()
+		return b.conn.Context()
 	}
 	return ctx
 }
