@@ -1,17 +1,16 @@
 package builder
 
 import (
-	"context"
-	"database/sql"
 	"fmt"
 	"strings"
 
+	"github.com/guadalsistema/go-compose-sql/v2/dialect"
 	"github.com/guadalsistema/go-compose-sql/v2/table"
 )
 
 // InsertBuilder builds INSERT queries
 type InsertBuilder struct {
-	conn      ConnectionInterface
+	dialect   dialect.Dialect
 	table     table.TableInterface
 	values    []map[string]interface{} // Column-value pairs for each row
 	returning []string
@@ -19,10 +18,10 @@ type InsertBuilder struct {
 }
 
 // NewInsert creates a new INSERT builder
-func NewInsert(conn ConnectionInterface, tbl table.TableInterface) *InsertBuilder {
+func NewInsert(d dialect.Dialect, tbl table.TableInterface) *InsertBuilder {
 	return &InsertBuilder{
-		conn:  conn,
-		table: tbl,
+		dialect: d,
+		table:   tbl,
 	}
 }
 
@@ -113,7 +112,7 @@ func (b *InsertBuilder) ToSQL() (string, []interface{}, error) {
 
 	// RETURNING
 	if len(b.returning) > 0 {
-		if !b.conn.Dialect().SupportsReturning() {
+		if !b.dialect.SupportsReturning() {
 			return "", nil, fmt.Errorf("driver does not support RETURNING clause")
 		}
 		sql.WriteString(" RETURNING ")
@@ -121,62 +120,4 @@ func (b *InsertBuilder) ToSQL() (string, []interface{}, error) {
 	}
 
 	return sql.String(), args, nil
-}
-
-// Exec executes the INSERT and returns the result
-func (b *InsertBuilder) Exec(ctx context.Context) (sql.Result, error) {
-	if len(b.returning) > 0 {
-		return nil, fmt.Errorf("Exec cannot be used with RETURNING clause")
-	}
-	ctx = b.resolveContext(ctx)
-	if err := ctx.Err(); err != nil {
-		return nil, err
-	}
-
-	sqlStr, args, err := b.ToSQL()
-	if err != nil {
-		return nil, err
-	}
-
-	rawSQL := sqlStr
-	sqlStr = FormatPlaceholders(sqlStr, b.conn.Dialect())
-	logSQLTransform(b.conn.Logger(), rawSQL, sqlStr, args)
-
-	// Regular insert
-	return b.conn.ExecuteContext(ctx, sqlStr, args...)
-}
-
-// One executes the INSERT with RETURNING and scans into dest
-func (b *InsertBuilder) One(ctx context.Context, dest interface{}) error {
-	if len(b.returning) == 0 {
-		return fmt.Errorf("RETURNING clause required for One()")
-	}
-	ctx = b.resolveContext(ctx)
-	if err := ctx.Err(); err != nil {
-		return err
-	}
-
-	sqlStr, args, err := b.ToSQL()
-	if err != nil {
-		return err
-	}
-
-	rawSQL := sqlStr
-	sqlStr = FormatPlaceholders(sqlStr, b.conn.Dialect())
-	logSQLTransform(b.conn.Logger(), rawSQL, sqlStr, args)
-
-	rows, err := b.conn.QueryRowsContext(ctx, sqlStr, args...)
-	if err != nil {
-		return err
-	}
-	defer rows.Close()
-
-	return scanOne(rows, dest)
-}
-
-func (b *InsertBuilder) resolveContext(ctx context.Context) context.Context {
-	if ctx == nil {
-		return b.conn.Context()
-	}
-	return ctx
 }

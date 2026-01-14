@@ -5,9 +5,7 @@ import (
 	"database/sql"
 	"log/slog"
 
-	"github.com/guadalsistema/go-compose-sql/v2/builder"
 	"github.com/guadalsistema/go-compose-sql/v2/dialect"
-	"github.com/guadalsistema/go-compose-sql/v2/table"
 )
 
 // Connection represents a database connection/transaction context.
@@ -64,7 +62,6 @@ func (c *Connection) QueryRowsContext(ctx context.Context, query string, args ..
 	return c.db.QueryContext(ctx, query, args...)
 }
 
-
 // Commit commits the transaction.
 func (c *Connection) Commit() error {
 	if c.tx == nil {
@@ -116,32 +113,4 @@ func (c *Connection) Context() context.Context {
 // InTransaction returns true if the connection is in a transaction.
 func (c *Connection) InTransaction() bool {
 	return c.tx != nil
-}
-
-// Query creates a new SELECT query builder.
-func (c *Connection) Query(tbl table.TableInterface) *builder.SelectBuilder {
-	return builder.NewSelect(c, tbl)
-}
-
-// Insert creates a new INSERT query builder.
-func (c *Connection) Insert(tbl table.TableInterface) *builder.InsertBuilder {
-	return builder.NewInsert(c, tbl)
-}
-
-// Update creates a new UPDATE query builder.
-func (c *Connection) Update(tbl table.TableInterface) *builder.UpdateBuilder {
-	return builder.NewUpdate(c, tbl)
-}
-
-// Delete creates a new DELETE query builder.
-func (c *Connection) Delete(tbl table.TableInterface) *builder.DeleteBuilder {
-	return builder.NewDelete(c, tbl)
-}
-
-// GetTableColumns extracts column references from a Table[T] object.
-func (c *Connection) GetTableColumns(tbl interface{}) []*table.ColumnRef {
-	if t, ok := tbl.(interface{ Columns() []*table.ColumnRef }); ok {
-		return t.Columns()
-	}
-	return nil
 }

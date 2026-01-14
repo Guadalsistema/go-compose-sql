@@ -1,18 +1,17 @@
 package builder
 
 import (
-	"context"
-	"database/sql"
 	"fmt"
 	"strings"
 
+	"github.com/guadalsistema/go-compose-sql/v2/dialect"
 	"github.com/guadalsistema/go-compose-sql/v2/expr"
 	"github.com/guadalsistema/go-compose-sql/v2/table"
 )
 
 // UpdateBuilder builds UPDATE queries
 type UpdateBuilder struct {
-	conn       ConnectionInterface
+	dialect    dialect.Dialect
 	table      table.TableInterface
 	sets       map[string]interface{} // Column-value pairs to update
 	whereExprs []expr.Expr
@@ -20,11 +19,11 @@ type UpdateBuilder struct {
 }
 
 // NewUpdate creates a new UPDATE builder
-func NewUpdate(conn ConnectionInterface, tbl table.TableInterface) *UpdateBuilder {
+func NewUpdate(d dialect.Dialect, tbl table.TableInterface) *UpdateBuilder {
 	return &UpdateBuilder{
-		conn:  conn,
-		table: tbl,
-		sets:  make(map[string]interface{}),
+		dialect: d,
+		table:   tbl,
+		sets:    make(map[string]interface{}),
 	}
 }
 
@@ -87,7 +86,7 @@ func (b *UpdateBuilder) ToSQL() (string, []interface{}, error) {
 
 	// RETURNING
 	if len(b.returning) > 0 {
-		if !b.conn.Dialect().SupportsReturning() {
+		if !b.dialect.SupportsReturning() {
 			return "", nil, fmt.Errorf("driver does not support RETURNING clause")
 		}
 		sql.WriteString(" RETURNING ")
@@ -95,62 +94,4 @@ func (b *UpdateBuilder) ToSQL() (string, []interface{}, error) {
 	}
 
 	return sql.String(), args, nil
-}
-
-// Exec executes the UPDATE and returns the result
-func (b *UpdateBuilder) Exec(ctx context.Context) (sql.Result, error) {
-	if len(b.returning) > 0 {
-		return nil, fmt.Errorf("Exec cannot be used with RETURNING clause")
-	}
-	ctx = b.resolveContext(ctx)
-	if err := ctx.Err(); err != nil {
-		return nil, err
-	}
-
-	sqlStr, args, err := b.ToSQL()
-	if err != nil {
-		return nil, err
-	}
-
-	rawSQL := sqlStr
-	sqlStr = FormatPlaceholders(sqlStr, b.conn.Dialect())
-	logSQLTransform(b.conn.Logger(), rawSQL, sqlStr, args)
-
-	// Regular update
-	return b.conn.ExecuteContext(ctx, sqlStr, args...)
-}
-
-// One executes the UPDATE with RETURNING and scans into dest
-func (b *UpdateBuilder) One(ctx context.Context, dest interface{}) error {
-	if len(b.returning) == 0 {
-		return fmt.Errorf("RETURNING clause required for One()")
-	}
-	ctx = b.resolveContext(ctx)
-	if err := ctx.Err(); err != nil {
-		return err
-	}
-
-	sqlStr, args, err := b.ToSQL()
-	if err != nil {
-		return err
-	}
-
-	rawSQL := sqlStr
-	sqlStr = FormatPlaceholders(sqlStr, b.conn.Dialect())
-	logSQLTransform(b.conn.Logger(), rawSQL, sqlStr, args)
-
-	rows, err := b.conn.QueryRowsContext(ctx, sqlStr, args...)
-	if err != nil {
-		return err
-	}
-	defer rows.Close()
-
-	return scanOne(rows, dest)
-}
-
-func (b *UpdateBuilder) resolveContext(ctx context.Context) context.Context {
-	if ctx == nil {
-		return b.conn.Context()
-	}
-	return ctx
 }

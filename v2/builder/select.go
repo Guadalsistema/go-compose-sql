@@ -1,7 +1,6 @@
 package builder
 
 import (
-	"context"
 	"fmt"
 	"strings"
 
@@ -11,7 +10,6 @@ import (
 
 // SelectBuilder builds SELECT queries
 type SelectBuilder struct {
-	conn       ConnectionInterface
 	table      table.TableInterface
 	columns    []string
 	whereExprs []expr.Expr
@@ -38,9 +36,8 @@ type OrderByClause struct {
 }
 
 // NewSelect creates a new SELECT builder
-func NewSelect(conn ConnectionInterface, tbl table.TableInterface) *SelectBuilder {
+func NewSelect(tbl table.TableInterface) *SelectBuilder {
 	return &SelectBuilder{
-		conn:  conn,
 		table: tbl,
 	}
 }
@@ -229,111 +226,4 @@ func (b *SelectBuilder) ToSQL() (string, []interface{}, error) {
 	}
 
 	return sql.String(), args, nil
-}
-
-// All executes the query and returns all results
-func (b *SelectBuilder) All(ctx context.Context, dest interface{}) error {
-	ctx = b.resolveContext(ctx)
-	if err := ctx.Err(); err != nil {
-		return err
-	}
-
-	sqlStr, args, err := b.ToSQL()
-	if err != nil {
-		return err
-	}
-
-	rawSQL := sqlStr
-	sqlStr = FormatPlaceholders(sqlStr, b.conn.Dialect())
-	logSQLTransform(b.conn.Logger(), rawSQL, sqlStr, args)
-
-	rows, err := b.conn.QueryRowsContext(ctx, sqlStr, args...)
-	if err != nil {
-		return err
-	}
-	defer rows.Close()
-
-	return scanAll(rows, dest)
-}
-
-// One executes the query and returns a single result
-func (b *SelectBuilder) One(ctx context.Context, dest interface{}) error {
-	ctx = b.resolveContext(ctx)
-	if err := ctx.Err(); err != nil {
-		return err
-	}
-
-	sqlStr, args, err := b.ToSQL()
-	if err != nil {
-		return err
-	}
-
-	rawSQL := sqlStr
-	sqlStr = FormatPlaceholders(sqlStr, b.conn.Dialect())
-	logSQLTransform(b.conn.Logger(), rawSQL, sqlStr, args)
-
-	rows, err := b.conn.QueryRowsContext(ctx, sqlStr, args...)
-	if err != nil {
-		return err
-	}
-	defer rows.Close()
-
-	return scanOne(rows, dest)
-}
-
-// Count returns the count of matching rows
-func (b *SelectBuilder) Count(ctx context.Context) (int64, error) {
-	ctx = b.resolveContext(ctx)
-	if err := ctx.Err(); err != nil {
-		return 0, err
-	}
-
-	// Create a copy of the builder with COUNT(*)
-	countBuilder := &SelectBuilder{
-		conn:       b.conn,
-		table:      b.table,
-		columns:    []string{"COUNT(*) as count"},
-		whereExprs: b.whereExprs,
-		joins:      b.joins,
-		groupBy:    b.groupBy,
-		having:     b.having,
-	}
-
-	sqlStr, args, err := countBuilder.ToSQL()
-	if err != nil {
-		return 0, err
-	}
-
-	rawSQL := sqlStr
-	sqlStr = FormatPlaceholders(sqlStr, b.conn.Dialect())
-	logSQLTransform(b.conn.Logger(), rawSQL, sqlStr, args)
-
-	rows, err := b.conn.QueryRowsContext(ctx, sqlStr, args...)
-	if err != nil {
-		return 0, err
-	}
-	defer rows.Close()
-
-	if !rows.Next() {
-		if err := rows.Err(); err != nil {
-			return 0, err
-		}
-		return 0, fmt.Errorf("no rows")
-	}
-
-	var count int64
-	if err := rows.Scan(&count); err != nil {
-		return 0, err
-	}
-	if rows.Next() {
-		return 0, fmt.Errorf("expected exactly one row")
-	}
-	return count, rows.Err()
-}
-
-func (b *SelectBuilder) resolveContext(ctx context.Context) context.Context {
-	if ctx == nil {
-		return b.conn.Context()
-	}
-	return ctx
 }
