@@ -5,57 +5,103 @@ import "github.com/guadalsistema/go-compose-sql/v2/table"
 // ColumnExpr provides expression methods for columns
 // This is added to Column[T] via methods
 
-// Eq creates an equality expression (column = value)
-func Eq[T any](col *table.Column[T], value T) Expr {
-	return &BinaryExpr{
+// Eq creates an equality expression (column = value OR column = column)
+// Accepts either a raw value or another column (SQLValue)
+func Eq[T any](col *table.Column[T], value any) Expr {
+	var sqlValue SQLValue
+
+	// Check if value already implements SQLValue (e.g., another column)
+	if sv, ok := value.(SQLValue); ok {
+		sqlValue = sv
+	} else {
+		// Wrap raw value in Literal
+		sqlValue = V(value)
+	}
+
+	return &CompareExpr{
 		Left:     col.FullName(),
 		Operator: "=",
-		Right:    value,
+		Right:    sqlValue,
 	}
 }
 
-// Ne creates a not-equal expression (column != value)
-func Ne[T any](col *table.Column[T], value T) Expr {
-	return &BinaryExpr{
+// Ne creates a not-equal expression (column != value OR column != column)
+func Ne[T any](col *table.Column[T], value any) Expr {
+	var sqlValue SQLValue
+	if sv, ok := value.(SQLValue); ok {
+		sqlValue = sv
+	} else {
+		sqlValue = V(value)
+	}
+
+	return &CompareExpr{
 		Left:     col.FullName(),
 		Operator: "!=",
-		Right:    value,
+		Right:    sqlValue,
 	}
 }
 
-// Lt creates a less-than expression (column < value)
-func Lt[T any](col *table.Column[T], value T) Expr {
-	return &BinaryExpr{
+// Lt creates a less-than expression (column < value OR column < column)
+func Lt[T any](col *table.Column[T], value any) Expr {
+	var sqlValue SQLValue
+	if sv, ok := value.(SQLValue); ok {
+		sqlValue = sv
+	} else {
+		sqlValue = V(value)
+	}
+
+	return &CompareExpr{
 		Left:     col.FullName(),
 		Operator: "<",
-		Right:    value,
+		Right:    sqlValue,
 	}
 }
 
-// Le creates a less-than-or-equal expression (column <= value)
-func Le[T any](col *table.Column[T], value T) Expr {
-	return &BinaryExpr{
+// Le creates a less-than-or-equal expression (column <= value OR column <= column)
+func Le[T any](col *table.Column[T], value any) Expr {
+	var sqlValue SQLValue
+	if sv, ok := value.(SQLValue); ok {
+		sqlValue = sv
+	} else {
+		sqlValue = V(value)
+	}
+
+	return &CompareExpr{
 		Left:     col.FullName(),
 		Operator: "<=",
-		Right:    value,
+		Right:    sqlValue,
 	}
 }
 
-// Gt creates a greater-than expression (column > value)
-func Gt[T any](col *table.Column[T], value T) Expr {
-	return &BinaryExpr{
+// Gt creates a greater-than expression (column > value OR column > column)
+func Gt[T any](col *table.Column[T], value any) Expr {
+	var sqlValue SQLValue
+	if sv, ok := value.(SQLValue); ok {
+		sqlValue = sv
+	} else {
+		sqlValue = V(value)
+	}
+
+	return &CompareExpr{
 		Left:     col.FullName(),
 		Operator: ">",
-		Right:    value,
+		Right:    sqlValue,
 	}
 }
 
-// Ge creates a greater-than-or-equal expression (column >= value)
-func Ge[T any](col *table.Column[T], value T) Expr {
-	return &BinaryExpr{
+// Ge creates a greater-than-or-equal expression (column >= value OR column >= column)
+func Ge[T any](col *table.Column[T], value any) Expr {
+	var sqlValue SQLValue
+	if sv, ok := value.(SQLValue); ok {
+		sqlValue = sv
+	} else {
+		sqlValue = V(value)
+	}
+
+	return &CompareExpr{
 		Left:     col.FullName(),
 		Operator: ">=",
-		Right:    value,
+		Right:    sqlValue,
 	}
 }
 

@@ -6,6 +6,18 @@ type Expr interface {
 	ToSQL() (string, []interface{})
 }
 
+// SQLValue represents a value that can be used in SQL comparisons
+// It can be either a column reference or a literal value
+type SQLValue interface {
+	// SQLString returns the SQL representation
+	// Returns (sqlString, isLiteral) where:
+	// - For columns: ("table.column", false)
+	// - For values: ("?", true) with the actual value stored separately
+	SQLString() (string, bool)
+	// Value returns the actual value if this is a literal, nil otherwise
+	Value() interface{}
+}
+
 // BinaryExpr represents a binary operation (=, !=, <, >, etc.)
 type BinaryExpr struct {
 	Left     string
@@ -15,6 +27,41 @@ type BinaryExpr struct {
 
 func (b *BinaryExpr) ToSQL() (string, []interface{}) {
 	return b.Left + " " + b.Operator + " ?", []interface{}{b.Right}
+}
+
+// CompareExpr represents a comparison operation that supports both column and value comparisons
+type CompareExpr struct {
+	Left     string
+	Operator string
+	Right    SQLValue
+}
+
+func (c *CompareExpr) ToSQL() (string, []interface{}) {
+	rightSQL, isLiteral := c.Right.SQLString()
+	if isLiteral {
+		// Value comparison: column = ?
+		return c.Left + " " + c.Operator + " " + rightSQL, []interface{}{c.Right.Value()}
+	}
+	// Column comparison: column1 = column2
+	return c.Left + " " + c.Operator + " " + rightSQL, nil
+}
+
+// Literal wraps a value to implement SQLValue interface
+type Literal struct {
+	Val interface{}
+}
+
+func (l Literal) SQLString() (string, bool) {
+	return "?", true
+}
+
+func (l Literal) Value() interface{} {
+	return l.Val
+}
+
+// V creates a Literal SQLValue from any value
+func V(value interface{}) SQLValue {
+	return Literal{Val: value}
 }
 
 // LogicalExpr represents AND/OR combinations

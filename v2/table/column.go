@@ -112,3 +112,15 @@ func (c *Column[T]) ForeignKey(table, column string) *Column[T] {
 	}
 	return c
 }
+
+// SQLString implements the SQLValue interface for Column
+// Returns the column name and false (not a literal value)
+func (c *Column[T]) SQLString() (string, bool) {
+	return c.FullName(), false
+}
+
+// Value implements the SQLValue interface for Column
+// Returns nil because columns don't have literal values
+func (c *Column[T]) Value() interface{} {
+	return nil
+}
