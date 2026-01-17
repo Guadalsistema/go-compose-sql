@@ -14,6 +14,7 @@ type InsertBuilder struct {
 	table     table.TableInterface
 	values    []map[string]interface{} // Column-value pairs for each row
 	returning []string
+	orIgnore  bool
 	err       error
 }
 
@@ -55,6 +56,16 @@ func (b *InsertBuilder) Returning(columns ...string) *InsertBuilder {
 	return b
 }
 
+// OrIgnore adds conflict resolution to ignore constraint violations
+// SQL syntax varies by database:
+//   - SQLite: INSERT OR IGNORE INTO ...
+//   - MySQL: INSERT IGNORE INTO ...
+//   - PostgreSQL: INSERT INTO ... ON CONFLICT DO NOTHING
+func (b *InsertBuilder) OrIgnore() *InsertBuilder {
+	b.orIgnore = true
+	return b
+}
+
 // ToSQL generates the SQL query and arguments
 func (b *InsertBuilder) ToSQL() (string, []interface{}, error) {
 	if b.err != nil {
@@ -67,12 +78,29 @@ func (b *InsertBuilder) ToSQL() (string, []interface{}, error) {
 	var sql strings.Builder
 	var args []interface{}
 
-	// INSERT INTO table_name
+	// Get ignore clause if needed
+	var ignoreClause string
+	var isPostgresStyle bool
+	if b.orIgnore {
+		ignoreClause = b.dialect.FormatIgnoreConflict()
+		if ignoreClause == "" {
+			return "", nil, fmt.Errorf("dialect does not support conflict resolution")
+		}
+		// PostgreSQL uses "ON CONFLICT DO NOTHING" which goes after VALUES
+		isPostgresStyle = strings.Contains(ignoreClause, "CONFLICT")
+	}
+
+	// INSERT [OR IGNORE|IGNORE] INTO table_name
 	tableName := b.table.Name()
 	if tableName == "" {
 		return "", nil, fmt.Errorf("invalid table")
 	}
-	sql.WriteString("INSERT INTO ")
+	sql.WriteString("INSERT ")
+	if b.orIgnore && !isPostgresStyle {
+		sql.WriteString(ignoreClause)
+		sql.WriteString(" ")
+	}
+	sql.WriteString("INTO ")
 	sql.WriteString(tableName)
 
 	// Get column names from first row
@@ -108,6 +136,12 @@ func (b *InsertBuilder) ToSQL() (string, []interface{}, error) {
 			}
 		}
 		sql.WriteString(")")
+	}
+
+	// ON CONFLICT DO NOTHING (PostgreSQL)
+	if b.orIgnore && isPostgresStyle {
+		sql.WriteString(" ")
+		sql.WriteString(ignoreClause)
 	}
 
 	// RETURNING

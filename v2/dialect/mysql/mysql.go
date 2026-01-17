@@ -14,3 +14,7 @@ func (d *MySQLDialect) SupportsReturning() bool {
 func (d *MySQLDialect) Quote(identifier string) string {
 	return "`" + identifier + "`"
 }
+
+func (d *MySQLDialect) FormatIgnoreConflict() string {
+	return "IGNORE"
+}

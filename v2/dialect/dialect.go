@@ -19,6 +19,10 @@ type Dialect interface {
 
 	// Quote quotes an identifier (table/column name)
 	Quote(identifier string) string
+
+	// FormatIgnoreConflict returns the SQL fragment for ignoring conflicts
+	// Returns empty string if not supported by the dialect
+	FormatIgnoreConflict() string
 }
 
 // DialectByName returns a dialect by name

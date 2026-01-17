@@ -16,3 +16,7 @@ func (d *PostgresDialect) SupportsReturning() bool {
 func (d *PostgresDialect) Quote(identifier string) string {
 	return `"` + identifier + `"`
 }
+
+func (d *PostgresDialect) FormatIgnoreConflict() string {
+	return "ON CONFLICT DO NOTHING"
+}

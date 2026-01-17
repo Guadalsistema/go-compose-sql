@@ -14,3 +14,7 @@ func (d *SQLiteDialect) SupportsReturning() bool {
 func (d *SQLiteDialect) Quote(identifier string) string {
 	return `"` + identifier + `"`
 }
+
+func (d *SQLiteDialect) FormatIgnoreConflict() string {
+	return "OR IGNORE"
+}
